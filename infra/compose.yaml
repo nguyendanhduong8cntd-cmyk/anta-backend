@@ -1,0 +1,72 @@
+name: alobo-clone-backend
+x-backend: &backend
+  image: alobo-backend:local
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  env_file: ../.env
+  environment:
+    NODE_ENV: development
+    BIND_HOST: 0.0.0.0
+    DATABASE_URL: postgresql://alobo:alobo_local@postgres:5432/alobo
+    REDIS_URL: redis://redis:6379
+  profiles: ["app"]
+  restart: unless-stopped
+services:
+  postgres:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_USER: alobo
+      POSTGRES_PASSWORD: alobo_local
+      POSTGRES_DB: alobo
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alobo -d alobo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:56379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    <<: *backend
+    command: ["node", "dist/scripts/migrate.js"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    <<: *backend
+    command: ["node", "dist/apps/api/main.js"]
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  worker:
+    <<: *backend
+    command: ["node", "dist/apps/worker/main.js"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+  realtime:
+    <<: *backend
+    command: ["node", "dist/apps/realtime/main.js"]
+    ports: ["127.0.0.1:3001:3001"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+volumes:
+  postgres-data:
+  redis-data:
