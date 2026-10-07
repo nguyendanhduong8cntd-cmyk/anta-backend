@@ -18,7 +18,8 @@
     "openapi": "node --env-file-if-exists=.env dist/scripts/openapi.js",
     "test": "npm run build && node --test dist/tests/unit/*.test.js",
     "test:live": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 dist/tests/live/*.test.js",
-    "test:integration": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 dist/tests/integration/*.test.js"
+    "test:integration": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 dist/tests/integration/*.test.js",
+    "db:import-venues": "node --env-file-if-exists=.env dist/scripts/import-venues.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

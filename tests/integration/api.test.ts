@@ -12,6 +12,7 @@ import { PaymentService } from '../../modules/payment/service';
 import { signWebhook } from '../../modules/payment/signature';
 import { migrate } from '../../scripts/migrate';
 import { demoIds as seedIds, seed } from '../../scripts/seed';
+import { importVenues, Venue } from '../../scripts/import-venues';
 import { dispatchOutbox } from '../../apps/worker/outbox';
 import { deliverNotification } from '../../apps/worker/notifications';
 import { buildOpenApi } from '../../packages/contracts/openapi';
@@ -101,6 +102,44 @@ test('health, OpenAPI contract, envelope, validation and PostGIS search', async 
   assert.ok(doc.components?.schemas?.Booking);
   assert.ok(doc.paths['/api/v1/bookings'].post?.responses['201']);
   await SwaggerParser.validate(doc as any);
+});
+test('imported venues are found under every sport they advertise and re-import updates the same rows', async () => {
+  const slug = 'sport_integration_fixture', name = `Import fixture ${runId}`;
+  // Da Nang, away from the coordinates the PostGIS search test counts on.
+  const venue: Venue = { slug, name, address: '1 Bạch Đằng, Đà Nẵng', hours: '05:30 - 22:00', sports: ['Đa năng', 'Bóng rổ'], location: { lat: 16.0712, lng: 108.2241 },
+    priceTables: [{ group: 'Nguyên sân', name: 'Thuê 60 phút', rows: [{ days: 'T2 - CN', time: '6h - 22h', fixed: 300000, walkIn: 330000 }] },
+      { group: 'Nguyên sân', name: 'Thuê 30 phút', rows: [{ days: 'T2 - CN', time: '6h - 22h', fixed: 200000, walkIn: 200000 }] }],
+    services: [{ name: 'Nước suối', price: 10000, unit: 'chai' }, { name: 'Nước suối', price: 200000, unit: 'thùng' }] };
+  const data = { venues: { [slug]: venue }, bySport: { 'Đa năng': { slugs: [slug] } } };
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const stored = async () => (await pool.query(`SELECT (SELECT count(*)::int FROM catalog.yards y WHERE y.branch_id=b.id AND y.active) AS yards,
+    (SELECT count(*)::int FROM catalog.yards y WHERE y.branch_id=b.id) AS all_yards, (SELECT count(*)::int FROM catalog.services s WHERE s.branch_id=b.id) AS services,
+    (SELECT count(*)::int FROM catalog.branch_sports s WHERE s.branch_id=b.id) AS sports FROM catalog.branches b WHERE b.name=$1`, [name])).rows;
+  try {
+    // A venue that lost a yard type, a service and a sport: the yard is hidden (bookings may reference it), the rest is removed.
+    const before = { ...venue, sports: [...venue.sports, 'Golf'], services: [...venue.services!, { name: 'Thuê bóng', price: 5000, unit: null }],
+      priceTables: [...venue.priceTables!, { group: 'Nửa sân', name: 'Thuê 60 phút', rows: [{ days: null, time: '6h - 22h', fixed: null, walkIn: 150000 }] }] };
+    assert.deepEqual(await importVenues(pool, { ...data, venues: { [slug]: before } }), { branches: 1, yards: 2, services: 3, withoutYard: [], skipped: [] });
+    assert.deepEqual(await stored(), [{ yards: 2, all_yards: 2, services: 3, sports: 3 }]);
+    const first = await importVenues(pool, data);
+    assert.deepEqual(first, { branches: 1, yards: 1, services: 2, withoutYard: [], skipped: [] });
+    assert.deepEqual(await importVenues(pool, data), first);
+    assert.deepEqual(await stored(), [{ yards: 1, all_yards: 2, services: 2, sports: 2 }]);
+    // An incomplete record is reported and leaves what is already stored untouched.
+    assert.deepEqual(await importVenues(pool, { venues: { [slug]: { ...venue, location: null } }, bySport: {} }),
+      { branches: 0, yards: 0, services: 0, withoutYard: [], skipped: [slug] });
+    assert.deepEqual(await stored(), [{ yards: 1, all_yards: 2, services: 2, sports: 2 }]);
+  } finally { await pool.end(); }
+  const sports = (await request('/public/sports')).body.data as { id: string; slug: string }[];
+  const found = (sportSlug: string) => request(`/public/branches?sportId=${sports.find(sport => sport.slug === sportSlug)!.id}&q=${encodeURIComponent(name)}`);
+  // "Đa năng" is only advertised: the venue has no yard for it, yet it is listed under it.
+  for (const sportSlug of ['multi-sport', 'basketball']) assert.equal((await found(sportSlug)).body.data.total, 1, sportSlug);
+  assert.equal((await found('golf')).body.data.total, 0);
+  const detail = await request(`/public/branches/${(await found('multi-sport')).body.data.items[0].id}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.data.opening_hour, 6);
+  assert.deepEqual(detail.body.data.yards.map((yard: any) => [yard.name, yard.hourly_price]), [['Nguyên sân', 330000]]);
+  assert.match(detail.body.data.description, /Nguyên sân - Thuê 30 phút/);
 });
 test('OTP failure attempts persist, consume once and development endpoint is protected', async () => {
   const sent = await request('/public/auth/otp/send', 'POST', { identifier: `${runId}-otp@example.com`, purpose: 'register' });

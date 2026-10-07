@@ -35,10 +35,11 @@ async def branches(request: Request, lat: Annotated[float | None, Query(ge=-90, 
         CASE WHEN %s::float8 IS NULL THEN NULL ELSE round(ST_Distance(b.location,{point})) END AS distance_meters,
         count(*) OVER()::int AS total FROM catalog.branches b
         WHERE (%s::float8 IS NULL OR ST_DWithin(b.location,{point},%s))
-        AND (%s::uuid IS NULL OR EXISTS(SELECT 1 FROM catalog.yards y WHERE y.branch_id=b.id AND y.sport_id=%s AND y.active))
+        AND (%s::uuid IS NULL OR EXISTS(SELECT 1 FROM catalog.yards y WHERE y.branch_id=b.id AND y.sport_id=%s AND y.active)
+          OR EXISTS(SELECT 1 FROM catalog.branch_sports s WHERE s.branch_id=b.id AND s.sport_id=%s))
         AND (%s::text IS NULL OR b.name ILIKE '%%' || %s || '%%' OR b.address ILIKE '%%' || %s || '%%')
         ORDER BY distance_meters NULLS LAST,b.name,b.id LIMIT %s OFFSET %s""",
-        (lat, lng, lat, lat, lng, lat, radius, sport_id, sport_id, q, q, q, page_size, (page - 1) * page_size))
+        (lat, lng, lat, lat, lng, lat, radius, sport_id, sport_id, sport_id, q, q, q, page_size, (page - 1) * page_size))
     rows = await cur.fetchall()
     photos = await court_images(conn, request, [row["id"] for row in rows])
     items = []

@@ -79,6 +79,24 @@ npm.cmd run sandbox:pay -- <payment-intent-uuid>
 
 `GET /bookings/{id}` phải trả `CONFIRMED`. Redirect/UI không được tự xác nhận paid. Hủy booking đã trả tiền hoàn theo chính sách: trước giờ chơi từ 24 giờ hoàn 100%, từ 2 đến dưới 24 giờ hoàn 50%, dưới 2 giờ từ chối với `CANCELLATION_WINDOW_CLOSED` (chỉnh bằng `REFUND_*`).
 
+## Nhập dữ liệu sân
+
+Danh sách sân thu thập từ trang đặt lịch công khai (đã được nền tảng và chủ sân cho phép, chỉ dùng trên localhost) nằm ở `data/venues/alobo-hcm.json`. Nhập vào catalog:
+
+```powershell
+npm.cmd run build
+npm.cmd run db:import-venues -- data/venues/alobo-hcm.json
+```
+
+Chạy lại không tạo trùng: ID suy ra từ slug của sân nên lần sau chỉ cập nhật đúng các dòng cũ. Script bị chặn khi `NODE_ENV=production`.
+
+- Mỗi sân thành một shop và một branch: tên, địa chỉ, tọa độ, giờ mở cửa, ảnh, quy định; bảng giá đầy đủ theo khung giờ nằm trong `description`.
+- Mỗi loại sân có giá thành một yard. `hourly_price` là giá vãng lai trung vị của bảng giá đầu tiên thuộc loại sân đó; giá niêm yết theo ca (ví dụ `/1h30`) được quy về một giờ. Nguồn không công bố số lượng sân nên mỗi loại sân chỉ có một yard.
+- Môn mà sân đăng ký nhưng không có bảng giá riêng (ví dụ "Đa năng") lưu ở `catalog.branch_sports`; `GET /public/branches?sportId=` khớp cả môn của yard lẫn môn đăng ký.
+- Ảnh là URL gốc của nguồn, không tải về R2. Đánh giá của người dùng không được thu thập.
+
+Bộ thu thập nằm ở `tools/venue-collector` (xem README trong thư mục đó).
+
 ## Ảnh sân trên Cloudflare R2
 
 Tạo private bucket `alobo-court-images` trong R2, rồi tạo **R2 S3 Access Key ID + Secret Access Key** có quyền Object Read & Write chỉ trên bucket đó. Điền `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` vào `.env` cục bộ hoặc secret manager; `.env.example` chỉ chứa account ID/bucket, không chứa khóa. Nếu bucket thuộc jurisdiction EU/US/FedRAMP, đặt thêm `R2_ENDPOINT` tương ứng. Không dùng token quản trị đã gửi trong chat làm khóa lưu trữ và nên thu hồi/đổi token đó.

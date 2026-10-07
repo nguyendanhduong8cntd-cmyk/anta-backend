@@ -17,7 +17,8 @@ export class CatalogService {
       CASE WHEN $1::float8 IS NULL THEN NULL ELSE round(ST_Distance(b.location,${point})) END AS distance_meters,
       count(*) OVER()::int AS total FROM catalog.branches b
       WHERE ($1::float8 IS NULL OR ST_DWithin(b.location,${point},$3))
-      AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM catalog.yards y WHERE y.branch_id=b.id AND y.sport_id=$4 AND y.active))
+      AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM catalog.yards y WHERE y.branch_id=b.id AND y.sport_id=$4 AND y.active)
+        OR EXISTS(SELECT 1 FROM catalog.branch_sports s WHERE s.branch_id=b.id AND s.sport_id=$4))
       AND ($5::text IS NULL OR b.name ILIKE '%' || $5 || '%' OR b.address ILIKE '%' || $5 || '%')
       ORDER BY distance_meters NULLS LAST,b.name,b.id LIMIT $6 OFFSET $7`,
       [q.lat ?? null, q.lng ?? null, q.radius || 10000, q.sportId || null, q.q || null, pageSize, (page - 1) * pageSize])).rows;
