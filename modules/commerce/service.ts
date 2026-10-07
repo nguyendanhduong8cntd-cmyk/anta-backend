@@ -4,11 +4,13 @@ import { Idempotency } from '../../packages/idempotency';
 import { AccessService } from '../../packages/access';
 import { invariant } from '../../packages/contracts/errors';
 import { emitEvent } from '../../packages/events';
+import { orderRefundPercent, RefundService } from '../payment/refunds';
 import { CreateOrderDto, CreateVoucherDto, ValidateVoucherDto } from './dto';
 
 @Injectable()
 export class CommerceService {
-  constructor(private readonly db: Database, private readonly idem: Idempotency, private readonly access: AccessService) {}
+  constructor(private readonly db: Database, private readonly idem: Idempotency, private readonly access: AccessService,
+    private readonly refunds: RefundService) {}
   async createVoucher(userId: string, dto: CreateVoucherDto, requestId: string) {
     const from = new Date(dto.validFrom), to = new Date(dto.validTo);
     invariant(Number.isFinite(from.getTime()) && to > from && to.getTime() - from.getTime() <= 366 * 86400000,
@@ -81,7 +83,8 @@ export class CommerceService {
     return row;
   }
   async transition(tx: DbClient, row: any, to: 'CONFIRMED' | 'CANCELLED' | 'EXPIRED', reason: string, actorId?: string, requestId?: string) {
-    invariant(row.status === 'PENDING_PAYMENT', 'INVALID_ORDER_TRANSITION', 'Order cannot change from its current status');
+    invariant(row.status === 'PENDING_PAYMENT' || (row.status === 'CONFIRMED' && to === 'CANCELLED'),
+      'INVALID_ORDER_TRANSITION', 'Order cannot change from its current status');
     await tx.query('UPDATE commerce.orders SET status=$2,updated_at=now(),version=version+1 WHERE id=$1', [row.id, to]);
     await tx.query('INSERT INTO commerce.order_history(order_id,from_status,to_status,reason,actor_id) VALUES($1,$2,$3,$4,$5)',
       [row.id, row.status, to, reason, actorId || null]);
@@ -100,8 +103,14 @@ export class CommerceService {
       await this.get(userId, id, tx);
       const row = await this.lock(tx, id);
       if (row.status === 'CANCELLED') return row;
-      invariant(row.status !== 'CONFIRMED', 'REFUND_POLICY_REQUIRED', 'Paid/fulfilled order cancellation needs a refund policy');
-      return this.transition(tx, row, 'CANCELLED', 'user cancellation', userId, requestId);
+      invariant(row.status === 'PENDING_PAYMENT' || row.status === 'CONFIRMED', 'INVALID_ORDER_TRANSITION', 'Order cannot be cancelled');
+      if (row.status === 'PENDING_PAYMENT' || row.amount === 0) return this.transition(tx, row, 'CANCELLED', 'user cancellation', userId, requestId);
+      // Paid order: refundable in full for a fixed window after payment.
+      const percent = orderRefundPercent(row.updated_at, Date.now(), this.refunds.policy);
+      invariant(percent > 0, 'CANCELLATION_WINDOW_CLOSED', 'This order can no longer be cancelled for a refund');
+      await this.transition(tx, row, 'CANCELLED', 'user cancellation with refund', userId, requestId);
+      const refund = await this.refunds.request(tx, 'order', id, percent, 'order cancelled', requestId);
+      return { ...row, refund: refund ? { id: refund.id, amount: refund.amount, percent: refund.percent, status: refund.status } : null };
     });
   }
   async expireDue() {

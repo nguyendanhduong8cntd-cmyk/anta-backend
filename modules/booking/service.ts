@@ -4,11 +4,13 @@ import { Idempotency } from '../../packages/idempotency';
 import { emitEvent } from '../../packages/events';
 import { invariant } from '../../packages/contracts/errors';
 import { CatalogService } from '../catalog/service';
+import { bookingRefundPercent, RefundService } from '../payment/refunds';
 import { assertTransition, BookingStatus, validateSlot } from './domain';
 import { AvailabilityQuery, BookingQuery, BookingServiceDto, RecurringBookingDto, ReviewDto, SlotDto } from './dto';
 @Injectable()
 export class BookingService {
-  constructor(private readonly db: Database, private readonly catalog: CatalogService, private readonly idem: Idempotency) {}
+  constructor(private readonly db: Database, private readonly catalog: CatalogService, private readonly idem: Idempotency,
+    private readonly refunds: RefundService) {}
   async quote(dto: SlotDto, tx: DbClient = this.db.pool) {
     const slot = validateSlot(dto.startsAt, dto.endsAt);
     const yard = await this.catalog.yard(tx, dto.yardId);
@@ -148,10 +150,15 @@ export class BookingService {
       await this.get(userId, id, tx);
       const row = await this.lock(tx, id);
       if (row.status === 'CANCELLED') return row;
-      invariant(row.status !== 'CONFIRMED', 'REFUND_POLICY_REQUIRED', 'Paid booking cancellation requires a refund policy');
-      await this.transition(tx, row, 'CANCELLED', 'user cancellation', userId, requestId);
+      invariant(row.status === 'PENDING_PAYMENT' || row.status === 'CONFIRMED', 'INVALID_BOOKING_TRANSITION', 'Booking cannot be cancelled');
+      // Paid booking: the refund share depends on how far ahead of the slot the user cancels.
+      const paid = row.status === 'CONFIRMED';
+      const percent = paid ? bookingRefundPercent(row.starts_at, Date.now(), this.refunds.policy) : 0;
+      invariant(!paid || percent > 0, 'CANCELLATION_WINDOW_CLOSED', 'This booking is too close to its start time to cancel');
+      await this.transition(tx, row, 'CANCELLED', paid ? 'user cancellation with refund' : 'user cancellation', userId, requestId);
       await tx.query('UPDATE booking.reservations SET active=false WHERE booking_id=$1', [id]);
-      return row;
+      const refund = paid ? await this.refunds.request(tx, 'booking', id, percent, 'booking cancelled', requestId) : null;
+      return { ...row, refund: refund ? { id: refund.id, amount: refund.amount, percent: refund.percent, status: refund.status } : null };
     });
   }
   async inviteParticipant(userId: string, bookingId: string, participantId: string, requestId: string) {

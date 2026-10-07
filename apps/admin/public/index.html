@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Alobo Clone — Quản trị</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section id="login" class="card login" hidden>
+    <h1>Quản trị Alobo Clone</h1>
+    <p class="muted">Đăng nhập bằng tài khoản có quyền <code>admin</code>.</p>
+    <form id="login-form">
+      <label>Email hoặc số điện thoại <input name="identifier" autocomplete="username" required></label>
+      <label>Mật khẩu <input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Đăng nhập</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+  <div id="app" hidden>
+    <header>
+      <strong>Alobo Clone — Quản trị</strong>
+      <nav id="tabs"></nav>
+      <span id="who" class="muted"></span>
+      <button id="logout" class="ghost">Đăng xuất</button>
+    </header>
+    <main>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <div id="toolbar" class="toolbar"></div>
+      <div id="view"></div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

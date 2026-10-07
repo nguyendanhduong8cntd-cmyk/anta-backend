@@ -9,6 +9,7 @@ import { checkPassword, digest, hashPassword, keyedDigest, secureEqual, token } 
 import { signAccess, Principal } from '../../packages/auth/tokens';
 import { DeleteAccountDto, LoginDto, OtpSendDto, RegisterDto, ResetDto } from './dto';
 import { verifiedGoogleIdentity } from './firebase';
+import { deliverOtp, OtpTransports, transportsFor } from './delivery';
 export function normalizeIdentifier(value: string) {
   const identifier = value.trim().toLowerCase();
   invariant(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier) || /^\+[1-9]\d{7,14}$/.test(identifier),
@@ -19,6 +20,8 @@ export function normalizeIdentifier(value: string) {
 export class IdentityService {
   private readonly config = loadConfig();
   private readonly dummyHash = hashPassword(token());
+  /** Replaceable in tests; real SMTP/SMS transports otherwise. */
+  otpTransports: OtpTransports = this.config.otpDelivery === 'provider' ? transportsFor(this.config) : {};
   constructor(private readonly db: Database, private readonly redis: RedisService) {}
   async sendOtp(dto: OtpSendDto, ip: string) {
     const identifier = normalizeIdentifier(dto.identifier);
@@ -33,6 +36,14 @@ export class IdentityService {
       await tx.query('INSERT INTO identity.otp_challenges(id,identifier,purpose,code_hash,expires_at) VALUES($1,$2,$3,$4,$5)',
         [id, identifier, dto.purpose, keyedDigest(`${id}:${code}`, this.config.otpSecret), expiresAt]);
     });
+    if (this.config.otpDelivery === 'provider') {
+      try { return { challengeId: id, expiresAt, delivery: await deliverOtp(this.otpTransports, { identifier, code, purpose: dto.purpose }) }; }
+      catch (error) {
+        // An undelivered code must not stay valid.
+        await this.db.query('UPDATE identity.otp_challenges SET consumed_at=now() WHERE id=$1', [id]);
+        throw error;
+      }
+    }
     // Development delivery is explicit, gated and never logged or returned by public auth endpoints.
     if (this.config.devOtp) await this.redis.client.set(`dev:otp:${id}`, code, 'EX', 300);
     return { challengeId: id, expiresAt, delivery: 'development-only' };
@@ -257,7 +268,54 @@ export class IdentityService {
       await tx.query(`INSERT INTO platform.audit_events(actor_id,action,target_type,target_id,request_id)
         VALUES($1,'account.deletion_requested','user',$2,$3)`, [userId, userId, requestId || null]);
       return { status: 'DELETION_REQUESTED', requestedAt: row.requested_at, earliestPurgeAt: row.purge_after,
-        note: 'Personal-data purge requires a retention and legal review; no automatic purge is enabled' };
+        note: this.config.accountPurge ? 'Personal data is erased automatically after this date; financial records are kept anonymised'
+          : 'Automatic purge is disabled on this server' };
+    });
+  }
+  /** Worker entry point: erase personal data of accounts whose deletion grace period has elapsed. */
+  async purgeDue(limit = 20) {
+    if (!this.config.accountPurge) return 0;
+    const due = (await this.db.query('SELECT user_id FROM identity.deletion_requests WHERE completed_at IS NULL AND purge_after<=now() ORDER BY purge_after LIMIT $1', [limit])).rows;
+    let purged = 0;
+    for (const { user_id } of due) if (await this.purge(user_id)) purged++;
+    return purged;
+  }
+  /**
+   * Removes or blanks everything that identifies the person. Bookings, payments, refunds, orders and audit rows are
+   * retained for accounting, attached to a user row that no longer carries an identifier, name or credential.
+   */
+  async purge(userId: string) {
+    return this.db.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`identity-user:${userId}`]);
+      const user = (await tx.query("SELECT identifier FROM identity.users WHERE id=$1 AND status='DELETION_REQUESTED' FOR UPDATE", [userId])).rows[0];
+      const request = (await tx.query('SELECT 1 FROM identity.deletion_requests WHERE user_id=$1 AND completed_at IS NULL AND purge_after<=now() FOR UPDATE', [userId])).rows[0];
+      if (!user || !request) return false;
+      const summary: Record<string, number> = {};
+      const run = async (name: string, sql: string, params: unknown[] = [userId]) => { summary[name] = (await tx.query(sql, params)).rowCount || 0; };
+      await run('devices', 'DELETE FROM identity.devices WHERE user_id=$1');
+      await run('linkedAccounts', 'DELETE FROM identity.linked_accounts WHERE user_id=$1');
+      await run('profiles', 'DELETE FROM identity.profiles WHERE user_id=$1');
+      await run('roles', 'DELETE FROM identity.roles WHERE user_id=$1');
+      await run('sessions', 'DELETE FROM identity.refresh_sessions WHERE user_id=$1');
+      await run('otpChallenges', 'DELETE FROM identity.otp_challenges WHERE identifier=$1', [user.identifier]);
+      await run('favorites', 'DELETE FROM catalog.favorites WHERE user_id=$1');
+      await run('notifications', 'DELETE FROM notification.notifications WHERE user_id=$1');
+      await run('notificationPreferences', 'DELETE FROM notification.preferences WHERE user_id=$1');
+      await run('events', 'DELETE FROM platform.outbox_events WHERE user_id=$1');
+      await run('idempotencyKeys', 'DELETE FROM platform.idempotency WHERE user_id=$1');
+      await run('bookingInvitations', 'DELETE FROM booking.participants WHERE user_id=$1');
+      await run('reviewComments', "UPDATE booking.reviews SET comment='' WHERE user_id=$1 AND comment<>''");
+      await run('teamMemberships', 'DELETE FROM social.team_members m USING social.teams t WHERE m.team_id=t.id AND m.user_id=$1 AND t.owner_id<>$1');
+      await run('chatEnvelopes', 'DELETE FROM chat.message_envelopes e USING chat.messages m WHERE e.message_id=m.id AND (e.recipient_id=$1 OR m.sender_id=$1)');
+      await run('chatMessages', "UPDATE chat.messages SET body='',deleted_at=coalesce(deleted_at,now()) WHERE sender_id=$1 AND (body<>'' OR deleted_at IS NULL)");
+      await run('chatMemberships', "UPDATE chat.members SET status='LEFT' WHERE user_id=$1 AND status<>'LEFT'");
+      await run('chatKeys', 'DELETE FROM chat.device_keys WHERE user_id=$1');
+      await tx.query(`UPDATE identity.users SET identifier=$2,display_name='Deleted user',password_hash=$3,password_login_enabled=false,
+        status='DELETED',updated_at=now(),version=version+1 WHERE id=$1`, [userId, `deleted:${userId}`, await hashPassword(token())]);
+      await tx.query('UPDATE identity.deletion_requests SET completed_at=now(),purge_summary=$2 WHERE user_id=$1', [userId, JSON.stringify(summary)]);
+      await tx.query(`INSERT INTO platform.audit_events(actor_id,action,target_type,target_id,details)
+        VALUES(NULL,'account.purged','user',$1,$2)`, [userId, JSON.stringify(summary)]);
+      return true;
     });
   }
 }

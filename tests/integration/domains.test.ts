@@ -48,7 +48,8 @@ before(async () => {
   pool = new Pool({ connectionString: process.env.DATABASE_URL });
   await migrate(pool); await seed(pool);
   await pool.query(`INSERT INTO catalog.branches(id,shop_id,name,address,description,location,timezone,opening_hour,closing_hour)
-    SELECT $1,shop_id,name,address,description,location,timezone,opening_hour,closing_hour FROM catalog.branches WHERE id=$2`, [branchId, demoIds.branch]);
+    SELECT $1,shop_id,name,address,description,ST_SetSRID(ST_MakePoint(108.2022,16.0544),4326)::geography,timezone,opening_hour,closing_hour
+    FROM catalog.branches WHERE id=$2`, [branchId, demoIds.branch]);
   await pool.query(`INSERT INTO catalog.services(id,branch_id,name,price)
     SELECT $1,$2,name,price FROM catalog.services WHERE branch_id=$3 LIMIT 1`, [serviceId, branchId, demoIds.branch]);
   await pool.query(`INSERT INTO catalog.yards(id,branch_id,sport_id,name,hourly_price,currency)
@@ -66,7 +67,8 @@ test('membership-only event consumes exactly one credit and QR scan is staff-onl
   assert.equal(plan.status, 201);
   const paid = await request('/membership-plans', 'POST', { branchId, name: 'Paid plan', price: 10000, credits: 2, durationDays: 30 }, owner.accessToken);
   assert.equal(paid.status, 201);
-  assert.equal((await request('/membership-contracts', 'POST', { planId: paid.body.data.id }, a.accessToken, key())).status, 503);
+  const pendingPaid = await request('/membership-contracts', 'POST', { planId: paid.body.data.id }, a.accessToken, key());
+  assert.deepEqual([pendingPaid.status, pendingPaid.body.data.status], [201, 'PENDING_PAYMENT']);
   const enrollment = await request('/membership-contracts', 'POST', { planId: plan.body.data.id }, a.accessToken, key());
   assert.equal(enrollment.status, 201);
   const start = new Date(Date.now() + 86400000), end = new Date(start.getTime() + 3600000);
@@ -134,7 +136,9 @@ test('voucher quota, order ownership, signed payment and cancellation', async ()
   });
   assert.equal(payment.body.data.outcome, 'SUCCEEDED');
   assert.equal((await request(`/orders/${order.id}`, 'GET', undefined, buyer.accessToken)).body.data.status, 'CONFIRMED');
-  assert.equal((await request(`/orders/${order.id}/cancel`, 'POST', {}, buyer.accessToken, key())).status, 409);
+  // A paid order is refundable in full inside the refund window.
+  const paidCancel = await request(`/orders/${order.id}/cancel`, 'POST', {}, buyer.accessToken, key());
+  assert.deepEqual([paidCancel.status, paidCancel.body.data.status, paidCancel.body.data.refund?.percent], [201, 'CANCELLED', 100]);
 });
 
 test('chat invitation gates history and writes; send is idempotent and ordered', async () => {
@@ -156,7 +160,7 @@ test('chat invitation gates history and writes; send is idempotent and ordered',
   const messages = await request(`/conversation/${id}/messages?after=0`, 'GET', undefined, b.accessToken);
   assert.equal(messages.body.data.length, 2);
   assert.deepEqual(messages.body.data.map((m: any) => Number(m.seq)), [1, 2]);
-  assert.equal((await request('/crypto/handshake', 'POST', {}, a.accessToken)).status, 503);
+  assert.equal((await request('/crypto/handshake', 'POST', {}, a.accessToken)).body.data.protocol, 'signal');
   assert.equal((await request('/media/presign', 'POST', { mimeType: 'image/png', size: 1024 }, a.accessToken)).status, 503);
 });
 

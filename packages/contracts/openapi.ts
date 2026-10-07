@@ -10,7 +10,7 @@ const object = (properties: Record<string, any>, required = Object.keys(properti
 const page = (name: string) => object({ items: array(name), page: int, pageSize: int, total: int });
 export function buildOpenApi(app: INestApplication) {
   const doc = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle('Alobo Clone API').setVersion('0.1.0')
-    .setDescription('Clone backend contract, not original Alobo API. Paid flows are sandbox/fail-closed until merchant integration.').addBearerAuth().build());
+    .setDescription('Clone backend contract, not original Alobo API. Payments go through the configured provider (sandbox, PayOS or VNPay); only signed provider notifications confirm them.').addBearerAuth().build());
   const uuid = str('uuid'), time = str('date-time');
   const schemas: Record<string, SchemaObject> = {
     ApiError: object({ data: { nullable: true, type: 'object' }, meta: object({ requestId: str() }), error: object({ code: str(), message: str() }) }),
@@ -30,7 +30,7 @@ export function buildOpenApi(app: INestApplication) {
     Booking: object({ id: uuid, user_id: uuid, branch_id: uuid, yard_id: uuid, hold_id: uuid, starts_at: time, ends_at: time,
       amount: int, currency: str(), status: { type: 'string', enum: ['PENDING_PAYMENT', 'CONFIRMED', 'CANCELLED', 'EXPIRED'] },
       payment_expires_at: time, created_at: time, updated_at: time, version: int }),
-    PaymentIntent: object({ id: uuid, booking_id: { ...uuid, nullable: true }, order_id: { ...uuid, nullable: true }, user_id: uuid, provider: { type: 'string', enum: ['sandbox'] },
+    PaymentIntent: object({ id: uuid, booking_id: { ...uuid, nullable: true }, order_id: { ...uuid, nullable: true }, user_id: uuid, provider: { type: 'string', enum: ['sandbox', 'payos', 'vnpay'] },
       amount: int, currency: str(), status: { type: 'string', enum: ['CREATED', 'SUCCEEDED', 'EXPIRED', 'NEEDS_REVIEW'] },
       expires_at: time, created_at: time, updated_at: time, version: int }),
     Slot: object({ yard_id: uuid, name: str(), amount: int, currency: str(), starts_at: time, ends_at: time, available: bool }),

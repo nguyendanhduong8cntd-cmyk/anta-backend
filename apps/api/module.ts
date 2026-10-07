@@ -19,6 +19,7 @@ import { CommerceModule } from '../../modules/commerce/module';
 import { ChatModule } from '../../modules/chat/module';
 import { AdminModule } from '../../modules/admin/module';
 import { MediaModule } from '../../modules/media/module';
+import { RefundModule } from '../../modules/payment/refunds';
 @Public() @ApiTags('health') @Controller('health')
 class HealthController {
   constructor(private readonly db: Database, private readonly redis: RedisService) {}
@@ -32,7 +33,7 @@ class HealthController {
   }
 }
 @Module({
-  imports: [DatabaseModule, RedisModule, AuthModule, IdempotencyModule, AccessModule, IdentityModule, CatalogModule,
+  imports: [DatabaseModule, RedisModule, AuthModule, IdempotencyModule, AccessModule, RefundModule, IdentityModule, CatalogModule,
     BookingModule, PaymentModule, NotificationModule, ContentModule, MembershipModule, AcademyModule, SocialModule, CommerceModule, ChatModule, AdminModule, MediaModule],
   controllers: [HealthController], providers: [{ provide: APP_GUARD, useClass: AuthGuard }]
 })

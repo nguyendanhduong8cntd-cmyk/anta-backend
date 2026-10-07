@@ -8,6 +8,8 @@ import { loadConfig } from '../../packages/config';
 import { BookingService } from '../../modules/booking/service';
 import { PaymentService } from '../../modules/payment/service';
 import { CommerceService } from '../../modules/commerce/service';
+import { RefundService } from '../../modules/payment/refunds';
+import { IdentityService } from '../../modules/identity/service';
 import { dispatchOutbox } from './outbox';
 import { deliverNotification } from './notifications';
 async function main() {
@@ -24,7 +26,8 @@ async function main() {
     if (stopping || busy) return;
     busy = true;
     try { await app.get(BookingService).expireDue(); await app.get(CommerceService).expireDue();
-      await app.get(PaymentService).expireDue(); await dispatchOutbox(db, queue); }
+      await app.get(PaymentService).expireDue(); await app.get(RefundService).processPending();
+      await app.get(IdentityService).purgeDue(); await dispatchOutbox(db, queue); }
     catch { console.error(JSON.stringify({ event: 'worker.tick_failed' })); }
     finally { busy = false; }
   };

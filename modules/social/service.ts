@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Database } from '../../packages/database';
+import { Database, DbClient } from '../../packages/database';
 import { Idempotency } from '../../packages/idempotency';
 import { AccessService } from '../../packages/access';
-import { ApiError, invariant } from '../../packages/contracts/errors';
+import { invariant } from '../../packages/contracts/errors';
 import { keyedDigest, digest, secureEqual, token } from '../../packages/auth/crypto';
 import { loadConfig } from '../../packages/config';
 import { emitEvent } from '../../packages/events';
@@ -25,7 +25,7 @@ export class SocialService {
     const start = new Date(dto.startsAt), end = new Date(dto.endsAt);
     invariant(Number.isFinite(start.getTime()) && start.getTime() > Date.now() && end > start && end.getTime() - start.getTime() <= 7 * 86400000,
       'INVALID_EVENT_TIME', 'Event must be future and at most seven days', 400);
-    invariant(!(dto.ticketPrice > 0 && dto.membershipRequired), 'INVALID_EVENT_PRICING', 'Paid ticket cannot be membership-only before a provider is configured', 400);
+    invariant(!(dto.ticketPrice > 0 && dto.membershipRequired), 'INVALID_EVENT_PRICING', 'An event is either paid by ticket or membership-only, not both', 400);
     return this.db.transaction(async tx => {
       await this.access.staff(userId, dto.branchId, tx);
       const row = (await tx.query(`INSERT INTO social.events(branch_id,organizer_id,title,description,starts_at,ends_at,capacity,ticket_price,membership_required)
@@ -41,25 +41,56 @@ export class SocialService {
       invariant(event, 'NOT_FOUND', 'Event not found', 404);
       invariant(event.status === 'OPEN' && event.starts_at.getTime() > Date.now(), 'EVENT_CLOSED', 'Event is closed');
       const existing = (await tx.query("SELECT * FROM social.tickets WHERE event_id=$1 AND user_id=$2", [eventId, userId])).rows[0];
-      if (existing) {
-        invariant(existing.status === 'VALID', 'TICKET_NOT_AVAILABLE', 'Ticket already used or cancelled');
-        return { ...existing, qrToken: this.qrToken(existing.id) };
-      }
-      const sold = (await tx.query("SELECT count(*)::int AS n FROM social.tickets WHERE event_id=$1 AND status IN ('VALID','USED')", [eventId])).rows[0].n;
+      const pendingLive = existing?.status === 'PENDING_PAYMENT' && existing.payment_expires_at.getTime() > Date.now();
+      if (existing?.status === 'VALID') return { ...existing, qrToken: this.qrToken(existing.id) };
+      if (pendingLive) return { ...existing, qrToken: null };
+      invariant(existing?.status !== 'USED', 'TICKET_NOT_AVAILABLE', 'Ticket already used');
+      // Seats awaiting payment are held until their deadline.
+      const sold = (await tx.query(`SELECT count(*)::int AS n FROM social.tickets WHERE event_id=$1 AND user_id<>$2
+        AND (status IN ('VALID','USED') OR (status='PENDING_PAYMENT' AND payment_expires_at>now()))`, [eventId, userId])).rows[0].n;
       invariant(sold < event.capacity, 'EVENT_FULL', 'Event capacity reached');
-      if (event.ticket_price > 0) throw new ApiError('PAYMENT_PROVIDER_REQUIRED', 'Paid event purchase is not configured', 503);
       invariant(!event.membership_required || contractId, 'MEMBERSHIP_REQUIRED', 'Event requires a membership contract');
-      const id = (await tx.query('SELECT gen_random_uuid() AS id')).rows[0].id;
-      const row = (await tx.query(`INSERT INTO social.tickets(id,event_id,branch_id,user_id,status,qr_nonce_hash)
-        VALUES($1,$2,$3,$4,'VALID',$5) RETURNING *`, [id, eventId, event.branch_id, userId, digest(this.qrToken(id))])).rows[0];
+      const paid = event.ticket_price > 0;
+      const id = existing?.id || (await tx.query('SELECT gen_random_uuid() AS id')).rows[0].id;
+      // A cancelled or expired ticket row is reused so one user holds at most one ticket per event.
+      const row = (await tx.query(`INSERT INTO social.tickets(id,event_id,branch_id,user_id,status,qr_nonce_hash,amount,payment_expires_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $8::boolean THEN now()+interval '15 minutes' END)
+        ON CONFLICT(id) DO UPDATE SET status=excluded.status,amount=excluded.amount,payment_expires_at=excluded.payment_expires_at,updated_at=now()
+        RETURNING *`, [id, eventId, event.branch_id, userId, paid ? 'PENDING_PAYMENT' : 'VALID', digest(this.qrToken(id)), event.ticket_price, paid])).rows[0];
       if (event.membership_required) await this.membership.consumeForTicket(tx, userId, contractId!, id, event.branch_id);
-      await emitEvent(tx, userId, 'ticket.issued', { ticketId: id, eventId }, requestId);
-      return { ...row, qrToken: this.qrToken(id) };
+      await emitEvent(tx, userId, paid ? 'ticket.pending_payment' : 'ticket.issued', { ticketId: id, eventId }, requestId);
+      return { ...row, qrToken: paid ? null : this.qrToken(id) };
     });
   }
   async tickets(userId: string) {
     const rows = (await this.db.query('SELECT * FROM social.tickets WHERE user_id=$1 ORDER BY created_at DESC', [userId])).rows;
     return rows.map(row => ({ ...row, qrToken: row.status === 'VALID' ? this.qrToken(row.id) : null }));
+  }
+  async ticket(userId: string, id: string, tx: DbClient = this.db.pool) {
+    const row = (await tx.query('SELECT * FROM social.tickets WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
+    invariant(row, 'NOT_FOUND', 'Ticket not found', 404);
+    return row;
+  }
+  /** Lock order is event -> ticket, the same as buyTicket. */
+  async lock(tx: DbClient, id: string) {
+    const ref = (await tx.query('SELECT event_id FROM social.tickets WHERE id=$1', [id])).rows[0];
+    invariant(ref, 'NOT_FOUND', 'Ticket not found', 404);
+    await tx.query('SELECT 1 FROM social.events WHERE id=$1 FOR UPDATE', [ref.event_id]);
+    return (await tx.query('SELECT * FROM social.tickets WHERE id=$1 FOR UPDATE', [id])).rows[0];
+  }
+  async confirmPaid(tx: DbClient, row: any, requestId: string) {
+    if (row.status !== 'PENDING_PAYMENT' || row.payment_expires_at.getTime() <= Date.now()) return false;
+    await tx.query("UPDATE social.tickets SET status='VALID',updated_at=now() WHERE id=$1", [row.id]);
+    await emitEvent(tx, row.user_id, 'ticket.issued', { ticketId: row.id, eventId: row.event_id }, requestId);
+    row.status = 'VALID';
+    return true;
+  }
+  async expire(tx: DbClient, row: any) {
+    await tx.query("UPDATE social.tickets SET status='EXPIRED',updated_at=now() WHERE id=$1 AND status='PENDING_PAYMENT'", [row.id]);
+    row.status = 'EXPIRED';
+  }
+  async expireDue() {
+    await this.db.query("UPDATE social.tickets SET status='EXPIRED',updated_at=now() WHERE status='PENDING_PAYMENT' AND payment_expires_at<=now()");
   }
   async scan(userId: string, signedToken: string, requestId: string) {
     const [id, signature] = signedToken.split('.');

@@ -3,6 +3,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import express from 'express';
+import { resolve } from 'node:path';
 import { ApiModule } from './module';
 import { loadConfig } from '../../packages/config';
 import { ApiExceptionFilter, EnvelopeInterceptor, requestContext } from '../../packages/observability/http';
@@ -20,6 +22,8 @@ export async function createApplication(): Promise<INestApplication> {
   app.use(requestContext);
   app.enableCors({ origin: config.corsOrigins, methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id', 'Last-Event-ID'], exposedHeaders: ['X-Request-Id'] });
+  // Admin/owner portal: static files only. Every action it performs goes through the authenticated /api/v1/admin API.
+  app.use('/admin', express.static(resolve('apps/admin/public'), { index: 'index.html', maxAge: 0 }));
   const redis = app.get(RedisService);
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api/v1/health/')) return next();

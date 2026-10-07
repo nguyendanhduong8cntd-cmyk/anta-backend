@@ -2,5 +2,5 @@ import { Module } from '@nestjs/common';
 import { MembershipModule } from '../membership/module';
 import { SocialController } from './controller';
 import { SocialService } from './service';
-@Module({ imports: [MembershipModule], controllers: [SocialController], providers: [SocialService] })
+@Module({ imports: [MembershipModule], controllers: [SocialController], providers: [SocialService], exports: [SocialService] })
 export class SocialModule {}

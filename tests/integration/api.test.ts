@@ -89,7 +89,7 @@ test('health, OpenAPI contract, envelope, validation and PostGIS search', async 
   const sports = await request('/public/sports'); assert.equal(sports.status, 200);
   assert.equal(sports.body.meta.requestId, sports.requestId);
   assert.equal((await request('/users/me')).status, 401);
-  const nearby = await request('/public/branches?lat=10.762622&lng=106.660172&radius=1000');
+  const nearby = await request('/public/branches?lat=10.762622&lng=106.660172&radius=1000&pageSize=100');
   assert.equal(nearby.status, 200); assert.ok(nearby.body.data.items.some((b: any) => b.id === demoIds.branch));
   const far = await request('/public/branches?lat=21&lng=105&radius=1000'); assert.equal(far.body.data.items.length, 0);
   assert.equal((await request('/public/branches?lat=10')).status, 400);
@@ -161,9 +161,12 @@ test('only signed webhook confirms; replay dedupe and amount checks preserve sta
   assert.equal((await pay(created.intent, randomUUID())).body.data.outcome, 'SUCCEEDED');
   assert.equal((await db.query('SELECT count(*)::int AS n FROM payment.transactions WHERE intent_id=$1', [created.intent.id])).rows[0].n, 1);
   assert.equal((await request(`/bookings/${created.booking.id}`, 'GET', undefined, user.accessToken)).body.data.status, 'CONFIRMED');
-  assert.equal((await request(`/bookings/${created.booking.id}/cancel`, 'POST', undefined, user.accessToken, key())).status, 409);
   const q = new URLSearchParams({ from: created.target.startsAt, to: created.target.endsAt });
   const availability = await request(`/public/branches/${demoIds.branch}/availability?${q}`); assert.equal(availability.body.data[0].available, false);
+  // A paid booking is cancellable under the refund policy; the refund is recorded against the settled intent.
+  const paidCancel = await request(`/bookings/${created.booking.id}/cancel`, 'POST', undefined, user.accessToken, key());
+  assert.deepEqual([paidCancel.status, paidCancel.body.data.status, paidCancel.body.data.refund?.status], [201, 'CANCELLED', 'SUCCEEDED']);
+  assert.equal((await request(`/public/branches/${demoIds.branch}/availability?${q}`)).body.data[0].available, true);
 });
 test('cancel is idempotent and releases the slot without letting late payment resurrect it', async () => {
   const user = await account('cancel'), created = await booking(user.accessToken);

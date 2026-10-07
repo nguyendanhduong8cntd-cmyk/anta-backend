@@ -17,6 +17,7 @@
     "db:seed": "node --env-file-if-exists=.env dist/scripts/seed.js",
     "openapi": "node --env-file-if-exists=.env dist/scripts/openapi.js",
     "test": "npm run build && node --test dist/tests/unit/*.test.js",
+    "test:live": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 dist/tests/live/*.test.js",
     "test:integration": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 dist/tests/integration/*.test.js"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "helmet": "^8.0.0",
     "ioredis": "^5.0.0",
     "jose": "^6.0.0",
+    "nodemailer": "^7.0.13",
     "pg": "^8.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
@@ -43,6 +45,7 @@
     "@apidevtools/swagger-parser": "^13.1.0",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.0.0",
     "socket.io-client": "^4.8.4",
     "typescript": "^5.9.0"

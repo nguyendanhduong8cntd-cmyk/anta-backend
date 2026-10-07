@@ -11,7 +11,10 @@ const secret = 'unit-test-secret-with-more-than-32-characters';
 test('booking state machine prevents terminal state reversal', () => {
   assert.doesNotThrow(() => assertTransition('PENDING_PAYMENT', 'CONFIRMED'));
   for (const status of ['CONFIRMED', 'CANCELLED', 'EXPIRED'] as const) assert.throws(() => assertTransition(status, 'PENDING_PAYMENT'));
-  assert.throws(() => assertTransition('CONFIRMED', 'CANCELLED'));
+  // A paid booking may only move to CANCELLED (with a refund); every other exit from a terminal state is refused.
+  assert.doesNotThrow(() => assertTransition('CONFIRMED', 'CANCELLED'));
+  assert.throws(() => assertTransition('CONFIRMED', 'EXPIRED'));
+  assert.throws(() => assertTransition('CANCELLED', 'CONFIRMED'));
 });
 test('slot interval validation and integer pricing duration', () => {
   const now = Date.parse('2026-09-28T00:00:00Z');

@@ -1,6 +1,8 @@
 # Alobo clone backend — implementation in progress
 
-Backend mới theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md), không gọi hoặc giả danh backend Alobo gốc. Đã có API cho nhiều miền Phase 2; **chưa hoàn tất Phase 3, chưa dùng được cho production**. Android hiện chưa nối với API này.
+Backend mới theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md), không gọi hoặc giả danh backend Alobo gốc. Android hiện chưa nối với API này.
+
+**Cập nhật 07/10/2026.** Đã có: cổng thanh toán PayOS và VNPay, OTP qua SMTP/Twilio, hoàn tiền khi hủy, thanh toán gói thành viên/lớp học/vé, thư mục khóa E2E cho chat, tự động xóa dữ liệu tài khoản và portal quản trị tại `/admin`. Tất cả đã qua test với cổng giả lập; **chưa chạy với tài khoản merchant, SMTP, Twilio, R2 hay Firebase thật** vì chưa có khóa. Xem [Tích hợp thật](#tích-hợp-thật) để bật và kiểm tra.
 
 Đang chuyển dần sang **Python/FastAPI**: bản chạy song song tại cổng 8000 đã có catalog/content, xác thực phiên JWT hiện có và ảnh sân R2. Các module còn lại vẫn ở NestJS; chưa chuyển Android hoặc thay thế cổng 3000. Xem [hướng dẫn FastAPI](python_backend/README.md).
 
@@ -12,10 +14,10 @@ Backend mới theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md), kh�
 - Sport, branch/yard/detail/services, search theo tên/bán kính PostGIS, pagination, favorites, giờ mở cửa theo `Asia/Ho_Chi_Minh`.
 - Quote tính phía server, slot nguyên giờ 1–8 giờ, hold 5 phút, booking/history/cancel chưa thanh toán. Một bảng reservation chung + GiST exclusion constraint chặn hold/booking overlap. Booking không kéo dài deadline của hold. Có người tham gia, dịch vụ cộng thêm trước payment intent, đánh giá sau booking hoàn tất.
 - Idempotency cho hold, booking, payment intent và cancel; scope theo user, so sánh payload; booking status history.
-- Payment **sandbox tự triển khai**, không phải sandbox của PayOS/VNPay. Không thu tiền, không tạo checkout/QR giả. Webhook HMAC trên raw bytes + timestamp 5 phút, dedupe, kiểm tra amount/currency; tiền đến muộn/cancel đưa vào `NEEDS_REVIEW`.
+- Payment qua `PAYMENT_PROVIDER`: `sandbox` (tự triển khai, không thu tiền, không tạo checkout/QR giả), `payos` hoặc `vnpay`. Mọi cổng dùng chung một luồng: chỉ thông báo có chữ ký hợp lệ mới xác nhận, dedupe theo event, kiểm tra amount/currency; tiền đến muộn đưa vào `NEEDS_REVIEW` để admin hoàn.
 - Transactional outbox → BullMQ → notification inbox; preference, mark-read, optional Firebase Admin FCM adapter. FCM mặc định tắt, chưa kiểm thử giao nhận thật; có thể gửi lặp nếu crash, client phải dedupe `eventId`.
-- Đặt sân định kỳ theo tuần (2–12 tuần) tạo slot nguyên tử/idempotent; mỗi booking trong chuỗi cần thanh toán riêng. Membership miễn phí và dùng credit cho sự kiện, academy/lớp miễn phí, event/ticket QR, team/invitation/match result, order/voucher theo quota và thanh toán order bằng sandbox. Các flow có thu tiền thực (gói, lớp, vé) trả 503 cho đến khi có merchant provider.
-- Chat server-side có lời mời/nhận lời mời, kiểm tra thành viên, cursor/sequence, idempotency, pin/xóa và phát event realtime. **Chưa có E2E encryption**; crypto handshake trả 503, không giả lập bảo mật.
+- Đặt sân định kỳ theo tuần (2–12 tuần) tạo slot nguyên tử/idempotent; mỗi booking trong chuỗi cần thanh toán riêng. Membership miễn phí và dùng credit cho sự kiện, academy/lớp miễn phí, event/ticket QR, team/invitation/match result, order/voucher theo quota và thanh toán order bằng sandbox. Gói thành viên, lớp học và vé có giá tạo bản ghi `PENDING_PAYMENT` giữ chỗ 15 phút, thanh toán bằng `POST /payment-intents` với `contractId`/`enrollmentId`/`ticketId`, chỉ kích hoạt sau thông báo có chữ ký.
+- Chat server-side có lời mời/nhận lời mời, kiểm tra thành viên, cursor/sequence, idempotency, pin/xóa và phát event realtime. Hội thoại tạo với `encrypted: true` chỉ nhận ciphertext theo từng thiết bị: server là thư mục khóa công khai theo giao thức Signal (X3DH + Double Ratchet) và không giải mã được. **Phần mã hóa phía Android chưa viết**, nên E2E chưa dùng được đầu-cuối.
 - Cloudflare R2 private bucket cho ảnh sân: chủ chi nhánh nhận presigned **PUT**, server xác minh kích thước/MIME, đọc ảnh gốc từ quarantine, decode/re-encode thành WebP rồi mới gắn URL **GET có thời hạn** vào branch/yard. Ảnh gốc không được trả cho client. Media chung vẫn chờ review, không tự public.
 - Admin API cấp/thu hồi role có scope chi nhánh và audit, bảo vệ role admin cuối cùng. Admin đầu tiên phải bootstrap thủ công bằng quy trình vận hành tin cậy; không có tài khoản admin mặc định.
 - SSE và Socket.IO phát domain event theo user, cursor bigint, replay sau reconnect, kiểm tra JWT/session. Hiện polling database mỗi 2 giây, không phải Redis fanout; chưa nghiệm thu tải lớn.
@@ -75,7 +77,7 @@ Dừng app bằng `docker compose -f infra/compose.yaml --profile app stop`. Kh�
 npm.cmd run sandbox:pay -- <payment-intent-uuid>
 ```
 
-`GET /bookings/{id}` phải trả `CONFIRMED`. Redirect/UI không được tự xác nhận paid. Cancel booking đã paid hiện trả `REFUND_POLICY_REQUIRED`, chưa thực hiện hoàn tiền.
+`GET /bookings/{id}` phải trả `CONFIRMED`. Redirect/UI không được tự xác nhận paid. Hủy booking đã trả tiền hoàn theo chính sách: trước giờ chơi từ 24 giờ hoàn 100%, từ 2 đến dưới 24 giờ hoàn 50%, dưới 2 giờ từ chối với `CANCELLATION_WINDOW_CLOSED` (chỉnh bằng `REFUND_*`).
 
 ## Ảnh sân trên Cloudflare R2
 
@@ -93,6 +95,36 @@ URL GET là bearer URL hết hạn sau 10 phút; client phải tải lại catal
 Dữ liệu seed là **sân demo**, không phải chi nhánh thật: sport `10000000-0000-4000-8000-000000000001`, branch `30000000-0000-4000-8000-000000000001`, yard `40000000-0000-4000-8000-000000000001`, giá 180.000 VND/giờ. Seed không tạo admin hay tài khoản với mật khẩu mặc định.
 
 Sau khi đăng ký tài khoản quản trị và xác minh quyền sở hữu qua quy trình vận hành ngoài API, người có quyền truy cập database có thể bootstrap admin đầu tiên bằng `INSERT INTO identity.roles(user_id,role) VALUES('<verified-user-uuid>','admin')`. Không chạy câu lệnh này với UUID chưa xác minh hoặc trong client Android. Các role tiếp theo cấp/thu hồi qua `/api/v1/admin/roles`, ghi audit.
+
+## Tích hợp thật
+
+Cấu hình trong `.env` (mẫu ở `.env.example`), không đưa khóa vào Git, Android hay log.
+
+| Hạng mục | Bật bằng | Ghi chú |
+|---|---|---|
+| PayOS | `PAYMENT_PROVIDER=payos`, `PAYOS_*`, `PAYMENT_RETURN_URL` | Đăng ký webhook `/api/v1/webhooks/payments/payos`. PayOS không có API hoàn tiền: lệnh hoàn vào `MANUAL_REVIEW`, admin chuyển khoản rồi ghi nhận trong portal. |
+| VNPay | `PAYMENT_PROVIDER=vnpay`, `VNPAY_*`, `PAYMENT_RETURN_URL` | Đăng ký IPN `/api/v1/webhooks/payments/vnpay/ipn`. Mặc định trỏ sandbox VNPay; đặt `VNPAY_PAY_URL`/`VNPAY_API_URL` cho production. Hoàn tiền gọi API refund từ worker. |
+| OTP email | `OTP_DELIVERY=provider`, `SMTP_*` | Dùng cho identifier là email. |
+| OTP SMS | `OTP_DELIVERY=provider`, `TWILIO_*` | Dùng cho số E.164. Thiếu kênh nào thì identifier loại đó trả 503. |
+| R2, Firebase | `R2_*`, `FIREBASE_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS` | Như các mục bên dưới. |
+
+Chỉ một cổng thanh toán hoạt động tại một thời điểm; webhook của cổng không được chọn trả 404. `URL trả về` không bao giờ xác nhận thanh toán.
+
+Kiểm tra với tài khoản thật (mỗi test tự bỏ qua nếu thiếu biến môi trường của nó, ghi object dưới prefix `live-test/` rồi xóa):
+
+```powershell
+npm.cmd run test:live
+```
+
+Test Firebase cần thêm `FIREBASE_WEB_API_KEY`; test gửi OTP cần `LIVE_TEST_EMAIL`/`LIVE_TEST_PHONE` là hộp thư/số của chính bạn. Chữ ký PayOS/VNPay mới được kiểm bằng cổng giả lập trong test; cần chạy một giao dịch sandbox thật của từng cổng trước khi nhận tiền.
+
+## Portal quản trị
+
+`http://127.0.0.1:3000/admin/` phục vụ file tĩnh; mọi thao tác đi qua `/api/v1/admin/*` và yêu cầu role `admin`. Có: tổng quan, tìm người dùng và cấp/thu hồi role, danh sách đặt sân, giao dịch (hoàn tiền cho khoản đến muộn), hàng chờ hoàn tiền thủ công, yêu cầu xóa tài khoản và nhật ký audit. Admin đầu tiên vẫn bootstrap thủ công như mô tả bên dưới.
+
+## Xóa tài khoản
+
+Sau yêu cầu xóa 30 ngày, worker xóa thiết bị, phiên, liên kết Google, role, yêu thích, thông báo, khóa E2E; làm trống nội dung tin nhắn và bình luận; đổi identifier thành `deleted:<id>`. Booking, giao dịch, hoàn tiền và audit được giữ lại cho kế toán nhưng không còn gắn với danh tính. Tắt bằng `ACCOUNT_PURGE_ENABLED=false`. Bản sao lưu database không được xử lý.
 
 ## Realtime contract
 
@@ -121,18 +153,18 @@ Chỉ tạo `alobo_test` một lần; nếu đã tồn tại bỏ qua lệnh CRE
 | Phạm vi | Trạng thái |
 |---|---|
 | Android API client/DTO generation, bind dữ liệu vào UI | Chưa triển khai; không thay đổi Android trong đợt backend này |
-| SMS/email OTP thật | Chưa có provider; development OTP không được mở production |
-| Google login/linked account và xóa tài khoản | Code Firebase verify/revocation + explicit link đã có, chưa kiểm với project thật. Deletion request thu hồi phiên; purge và retention policy chưa có |
-| Merchant payment thật, receipt/refund/reconciliation | Chưa có adapter/credential/policy; sandbox không thay thế provider thật |
-| Membership/academy/social | Flow miễn phí, credit, ticket QR, team, match/result, lớp/attendance đã có; thanh toán gói/lớp/vé và tournament bracket chưa có |
+| SMS/email OTP thật | Có SMTP và Twilio; chưa gửi thử với tài khoản thật |
+| Google login/linked account và xóa tài khoản | Code Firebase verify/revocation + explicit link đã có, chưa kiểm với project thật (`npm run test:live`). Purge tự động sau 30 ngày đã có; chính sách lưu trữ pháp lý và backup chưa xử lý |
+| Merchant payment thật, receipt/refund/reconciliation | Có adapter PayOS/VNPay và hoàn tiền; chưa chạy với merchant thật, chưa có biên lai và đối soát định kỳ |
+| Membership/academy/social | Flow miễn phí và có phí, credit, ticket QR, team, match/result, lớp/attendance đã có; tournament bracket chưa có. Hủy vé và hủy gói đã mua chưa có |
 | Đặt sân định kỳ | Có booking series tuần, giữ chỗ đồng thời; chưa có thu tiền tự động/gộp cho cả chuỗi |
-| Commerce/order/voucher và booking add-on | Có order/voucher quota và sandbox payment, booking add-on tính phía server; receipt/refund chưa có |
+| Commerce/order/voucher và booking add-on | Có order/voucher quota, thanh toán và hoàn tiền trong 24 giờ, booking add-on tính phía server; biên lai chưa có |
 | R2 ảnh sân/media chung | Ảnh sân decode/re-encode rồi publish bằng GET URL có thời hạn; media chung vẫn chờ review. R2 live test và chính sách/lifecycle cần làm |
-| Chat/moderation/E2E | Plaintext chat và realtime có; thiếu attachment, moderation và E2E |
-| Admin/owner portal, tenant staff RBAC | RBAC API và audit có; chưa có portal, bootstrap admin phải làm thủ công |
+| Chat/moderation/E2E | Plaintext chat, realtime và thư mục khóa/relay ciphertext E2E có; thiếu client mã hóa trên Android, attachment và moderation. E2E qua Socket.IO chưa hỗ trợ (dùng REST) |
+| Admin/owner portal, tenant staff RBAC | Portal cho admin có; chưa có giao diện riêng cho chủ sân, bootstrap admin phải làm thủ công |
 | Production deployment, TLS/gateway, PII encryption, backup/PITR/restore, metrics/tracing/load test | Chưa nghiệm thu |
 
-Không cố deploy production bằng cách đổi `NODE_ENV`: config chủ động từ chối development OTP và sandbox payment. Cần hoàn thành provider adapters, quản lý secret, operational/security checklist trước.
+Production từ chối development OTP và sandbox payment, và từ chối khởi động nếu thiếu bất kỳ khóa nào của cổng đã chọn. Trước khi nhận tiền thật cần chạy `npm run test:live`, một giao dịch sandbox của cổng, quản lý secret và checklist vận hành/bảo mật.
 
 ## Migration và vận hành
 

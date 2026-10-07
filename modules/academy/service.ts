@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { Database } from '../../packages/database';
+import { Database, DbClient } from '../../packages/database';
 import { Idempotency } from '../../packages/idempotency';
 import { AccessService } from '../../packages/access';
-import { ApiError, invariant } from '../../packages/contracts/errors';
+import { invariant } from '../../packages/contracts/errors';
+import { classRefundPercent, RefundService } from '../payment/refunds';
 import { emitEvent } from '../../packages/events';
 import { CreateCenterDto, CreateClassDto, CreateCourseDto } from './dto';
 
 @Injectable()
 export class AcademyService {
-  constructor(private readonly db: Database, private readonly access: AccessService, private readonly idem: Idempotency) {}
+  constructor(private readonly db: Database, private readonly access: AccessService, private readonly idem: Idempotency,
+    private readonly refunds: RefundService) {}
   async centers() { return (await this.db.query('SELECT * FROM academy.centers WHERE active ORDER BY name,id')).rows; }
   async center(id: string) {
     const row = (await this.db.query('SELECT * FROM academy.centers WHERE id=$1 AND active', [id])).rows[0];
@@ -73,14 +75,19 @@ export class AcademyService {
       const classRow = (await tx.query('SELECT * FROM academy.classes WHERE id=$1 FOR UPDATE', [classId])).rows[0];
       invariant(classRow, 'NOT_FOUND', 'Class not found', 404);
       invariant(classRow.status === 'OPEN' && classRow.starts_at.getTime() > Date.now(), 'CLASS_CLOSED', 'Class is no longer open');
-      if (classRow.price > 0) throw new ApiError('PAYMENT_PROVIDER_REQUIRED', 'Paid class enrollment is not configured', 503);
       const existing = (await tx.query('SELECT * FROM academy.enrollments WHERE class_id=$1 AND user_id=$2', [classId, userId])).rows[0];
-      if (existing?.status === 'ENROLLED') return existing;
-      const count = (await tx.query("SELECT count(*)::int AS n FROM academy.enrollments WHERE class_id=$1 AND status='ENROLLED'", [classId])).rows[0].n;
+      if (existing?.status === 'ENROLLED' || (existing?.status === 'PENDING_PAYMENT' && existing.payment_expires_at.getTime() > Date.now())) return existing;
+      // A seat awaiting payment is held until its deadline so two buyers cannot pay for the last place.
+      const count = (await tx.query(`SELECT count(*)::int AS n FROM academy.enrollments WHERE class_id=$1 AND user_id<>$2
+        AND (status='ENROLLED' OR (status='PENDING_PAYMENT' AND payment_expires_at>now()))`, [classId, userId])).rows[0].n;
       invariant(count < classRow.capacity, 'CLASS_FULL', 'Class has reached capacity');
-      const row = (await tx.query(`INSERT INTO academy.enrollments(class_id,user_id,status) VALUES($1,$2,'ENROLLED')
-        ON CONFLICT(class_id,user_id) DO UPDATE SET status='ENROLLED',updated_at=now(),version=academy.enrollments.version+1 RETURNING *`, [classId, userId])).rows[0];
-      await emitEvent(tx, userId, 'academy.enrolled', { enrollmentId: row.id, classId }, requestId);
+      const paid = classRow.price > 0;
+      const row = (await tx.query(`INSERT INTO academy.enrollments(class_id,user_id,status,amount,payment_expires_at)
+        VALUES($1,$2,$3,$4,CASE WHEN $5::boolean THEN now()+interval '15 minutes' END)
+        ON CONFLICT(class_id,user_id) DO UPDATE SET status=excluded.status,amount=excluded.amount,payment_expires_at=excluded.payment_expires_at,
+          updated_at=now(),version=academy.enrollments.version+1 RETURNING *`,
+        [classId, userId, paid ? 'PENDING_PAYMENT' : 'ENROLLED', classRow.price, paid])).rows[0];
+      await emitEvent(tx, userId, paid ? 'academy.pending_payment' : 'academy.enrolled', { enrollmentId: row.id, classId }, requestId);
       return row;
     });
   }
@@ -90,8 +97,40 @@ export class AcademyService {
       invariant(ref, 'NOT_FOUND', 'Enrollment not found', 404);
       const cls = (await tx.query('SELECT * FROM academy.classes WHERE id=$1 FOR UPDATE', [ref.class_id])).rows[0];
       invariant(cls.starts_at.getTime() > Date.now(), 'CLASS_STARTED', 'Class has already started');
-      return (await tx.query("UPDATE academy.enrollments SET status='CANCELLED',updated_at=now(),version=version+1 WHERE id=$1 AND user_id=$2 RETURNING *", [enrollmentId, userId])).rows[0];
+      const current = (await tx.query('SELECT * FROM academy.enrollments WHERE id=$1 FOR UPDATE', [enrollmentId])).rows[0];
+      if (current.status === 'CANCELLED') return current;
+      const row = (await tx.query("UPDATE academy.enrollments SET status='CANCELLED',updated_at=now(),version=version+1 WHERE id=$1 AND user_id=$2 RETURNING *", [enrollmentId, userId])).rows[0];
+      // Paid seat: full refund while the refund window is open, otherwise the seat is released without one.
+      const percent = current.status === 'ENROLLED' && current.amount > 0 ? classRefundPercent(cls.starts_at, Date.now(), this.refunds.policy) : 0;
+      const refund = percent ? await this.refunds.request(tx, 'enrollment', enrollmentId, percent, 'class enrollment cancelled') : null;
+      return { ...row, refund: refund ? { id: refund.id, amount: refund.amount, status: refund.status } : null };
     });
+  }
+  async enrollment(userId: string, id: string, tx: DbClient = this.db.pool) {
+    const row = (await tx.query('SELECT * FROM academy.enrollments WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
+    invariant(row, 'NOT_FOUND', 'Enrollment not found', 404);
+    return row;
+  }
+  /** Lock order is class -> enrollment, the same as enroll/cancel. */
+  async lock(tx: DbClient, id: string) {
+    const ref = (await tx.query('SELECT class_id FROM academy.enrollments WHERE id=$1', [id])).rows[0];
+    invariant(ref, 'NOT_FOUND', 'Enrollment not found', 404);
+    await tx.query('SELECT 1 FROM academy.classes WHERE id=$1 FOR UPDATE', [ref.class_id]);
+    return (await tx.query('SELECT * FROM academy.enrollments WHERE id=$1 FOR UPDATE', [id])).rows[0];
+  }
+  async confirmPaid(tx: DbClient, row: any, requestId: string) {
+    if (row.status !== 'PENDING_PAYMENT' || row.payment_expires_at.getTime() <= Date.now()) return false;
+    await tx.query("UPDATE academy.enrollments SET status='ENROLLED',updated_at=now(),version=version+1 WHERE id=$1", [row.id]);
+    await emitEvent(tx, row.user_id, 'academy.enrolled', { enrollmentId: row.id, classId: row.class_id }, requestId);
+    row.status = 'ENROLLED';
+    return true;
+  }
+  async expire(tx: DbClient, row: any) {
+    await tx.query("UPDATE academy.enrollments SET status='EXPIRED',updated_at=now(),version=version+1 WHERE id=$1 AND status='PENDING_PAYMENT'", [row.id]);
+    row.status = 'EXPIRED';
+  }
+  async expireDue() {
+    await this.db.query("UPDATE academy.enrollments SET status='EXPIRED',updated_at=now(),version=version+1 WHERE status='PENDING_PAYMENT' AND payment_expires_at<=now()");
   }
   async sessions(userId: string) {
     return (await this.db.query(`SELECT s.*,e.id AS enrollment_id FROM academy.class_sessions s JOIN academy.enrollments e ON e.class_id=s.class_id
