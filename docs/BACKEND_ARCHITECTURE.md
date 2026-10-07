@@ -1,5 +1,7 @@
 # Kiến trúc backend cần triển khai cho Alobo clone
 
+> Quyết định triển khai mới: chuyển backend clone sang **Python/FastAPI** theo từng module. Giữ PostgreSQL/PostGIS, Redis, R2 và API contract; FastAPI chạy song song trên cổng 8000 trong thời gian chuyển đổi. Tài liệu gốc bên dưới vẫn mô tả ranh giới nghiệp vụ và bản NestJS tham chiếu, không có nghĩa là bản FastAPI đã đạt đầy đủ parity. Theo dõi tiến độ trong [python_backend/README.md](../python_backend/README.md).
+
 ## 1. Kết luận kiến trúc
 
 Không nên dựng backend này như một CRUD đơn giản. APK gốc cho thấy sản phẩm là một nền tảng đặt sân thể thao đa chi nhánh, có booking thời gian thực, membership, học viện, sự kiện xã hội, đội/ghép trận, dịch vụ bán thêm, nhiều cổng thanh toán, thông báo và chat.

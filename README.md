@@ -1,18 +1,24 @@
-# Alobo clone backend — local MVP
+# Alobo clone backend — implementation in progress
 
-Backend mới theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md), không gọi hoặc giả danh backend Alobo gốc. Đây là phần nền tảng + luồng đặt sân Phase 1; **chưa phải toàn bộ Phase 1/2/3 và chưa dùng được cho production**. Android hiện chưa nối với API này.
+Backend mới theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md), không gọi hoặc giả danh backend Alobo gốc. Đã có API cho nhiều miền Phase 2; **chưa hoàn tất Phase 3, chưa dùng được cho production**. Android hiện chưa nối với API này.
+
+Đang chuyển dần sang **Python/FastAPI**: bản chạy song song tại cổng 8000 đã có catalog/content, xác thực phiên JWT hiện có và ảnh sân R2. Các module còn lại vẫn ở NestJS; chưa chuyển Android hoặc thay thế cổng 3000. Xem [hướng dẫn FastAPI](python_backend/README.md).
 
 ## Phần đã triển khai
 
 - NestJS modular monolith; API, realtime gateway và worker chạy bằng 3 tiến trình riêng.
 - PostgreSQL 16/PostGIS, schema theo module, migration có checksum và transaction; Redis/BullMQ.
-- OTP development, đăng ký có verification, login email/E.164 phone, reset password, profile, device FCM token. Password dùng scrypt; JWT 15 phút; refresh token hash, xoay vòng, phát hiện reuse và thu hồi family/session.
+- OTP development, đăng ký có verification, login email/E.164 phone, reset password, profile, device FCM token. Password dùng scrypt; JWT 15 phút; refresh token hash, xoay vòng, phát hiện reuse và thu hồi family/session. Google login/link adapter xác thực Firebase ID token khi có service account; không tự động gộp tài khoản trùng email. Yêu cầu xóa tài khoản cần nhập lại mật khẩu, khóa tài khoản/thu hồi phiên ngay; **chưa tự động purge dữ liệu**.
 - Sport, branch/yard/detail/services, search theo tên/bán kính PostGIS, pagination, favorites, giờ mở cửa theo `Asia/Ho_Chi_Minh`.
-- Quote tính phía server, slot nguyên giờ 1–8 giờ, hold 5 phút, booking/history/cancel chưa thanh toán. Một bảng reservation chung + GiST exclusion constraint chặn hold/booking overlap. Booking không kéo dài deadline của hold.
+- Quote tính phía server, slot nguyên giờ 1–8 giờ, hold 5 phút, booking/history/cancel chưa thanh toán. Một bảng reservation chung + GiST exclusion constraint chặn hold/booking overlap. Booking không kéo dài deadline của hold. Có người tham gia, dịch vụ cộng thêm trước payment intent, đánh giá sau booking hoàn tất.
 - Idempotency cho hold, booking, payment intent và cancel; scope theo user, so sánh payload; booking status history.
 - Payment **sandbox tự triển khai**, không phải sandbox của PayOS/VNPay. Không thu tiền, không tạo checkout/QR giả. Webhook HMAC trên raw bytes + timestamp 5 phút, dedupe, kiểm tra amount/currency; tiền đến muộn/cancel đưa vào `NEEDS_REVIEW`.
 - Transactional outbox → BullMQ → notification inbox; preference, mark-read, optional Firebase Admin FCM adapter. FCM mặc định tắt, chưa kiểm thử giao nhận thật; có thể gửi lặp nếu crash, client phải dedupe `eventId`.
-- SSE và Socket.IO phát domain event theo user, cursor bigint, replay sau reconnect, kiểm tra JWT/session. **Chưa có chat**. Hiện polling database mỗi 2 giây, không phải Redis fanout; chưa nghiệm thu tải lớn.
+- Đặt sân định kỳ theo tuần (2–12 tuần) tạo slot nguyên tử/idempotent; mỗi booking trong chuỗi cần thanh toán riêng. Membership miễn phí và dùng credit cho sự kiện, academy/lớp miễn phí, event/ticket QR, team/invitation/match result, order/voucher theo quota và thanh toán order bằng sandbox. Các flow có thu tiền thực (gói, lớp, vé) trả 503 cho đến khi có merchant provider.
+- Chat server-side có lời mời/nhận lời mời, kiểm tra thành viên, cursor/sequence, idempotency, pin/xóa và phát event realtime. **Chưa có E2E encryption**; crypto handshake trả 503, không giả lập bảo mật.
+- Cloudflare R2 private bucket cho ảnh sân: chủ chi nhánh nhận presigned **PUT**, server xác minh kích thước/MIME, đọc ảnh gốc từ quarantine, decode/re-encode thành WebP rồi mới gắn URL **GET có thời hạn** vào branch/yard. Ảnh gốc không được trả cho client. Media chung vẫn chờ review, không tự public.
+- Admin API cấp/thu hồi role có scope chi nhánh và audit, bảo vệ role admin cuối cùng. Admin đầu tiên phải bootstrap thủ công bằng quy trình vận hành tin cậy; không có tài khoản admin mặc định.
+- SSE và Socket.IO phát domain event theo user, cursor bigint, replay sau reconnect, kiểm tra JWT/session. Hiện polling database mỗi 2 giây, không phải Redis fanout; chưa nghiệm thu tải lớn.
 - Content/config/terms, request ID, structured log không ghi body/token/OTP/PII, validation, rate limit Redis, ownership checks, health/readiness, OpenAPI.
 
 ## Chạy local (PowerShell)
@@ -71,13 +77,28 @@ npm.cmd run sandbox:pay -- <payment-intent-uuid>
 
 `GET /bookings/{id}` phải trả `CONFIRMED`. Redirect/UI không được tự xác nhận paid. Cancel booking đã paid hiện trả `REFUND_POLICY_REQUIRED`, chưa thực hiện hoàn tiền.
 
+## Ảnh sân trên Cloudflare R2
+
+Tạo private bucket `alobo-court-images` trong R2, rồi tạo **R2 S3 Access Key ID + Secret Access Key** có quyền Object Read & Write chỉ trên bucket đó. Điền `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` vào `.env` cục bộ hoặc secret manager; `.env.example` chỉ chứa account ID/bucket, không chứa khóa. Nếu bucket thuộc jurisdiction EU/US/FedRAMP, đặt thêm `R2_ENDPOINT` tương ứng. Không dùng token quản trị đã gửi trong chat làm khóa lưu trữ và nên thu hồi/đổi token đó.
+
+Luồng API cho tài khoản `branch_owner`/`admin`:
+
+1. `POST /api/v1/branches/{branchId}/images/presign` với `{ "mimeType": "image/jpeg", "size": 123456, "yardId": "..." }`; bỏ `yardId` nếu là ảnh chung của chi nhánh. API trả `method: PUT`, URL 120 giây và header `Content-Type` cần gửi nguyên vẹn.
+2. Android/web `PUT` bytes ảnh trực tiếp tới URL ký, không gửi Bearer token backend đến R2. `size` phải đúng byte thực tế, tối đa 10 MiB. Nếu là browser, cấu hình CORS bucket cho origin và `PUT`/`Content-Type`.
+3. `POST /api/v1/branches/{branchId}/images/{uploadId}/complete`. Backend HEAD/GET, kiểm tra chữ ký ảnh, giới hạn kích thước/pixel, xoay và chuyển sang WebP (tối đa 2400px). Chỉ ảnh xử lý thành công mới có trạng thái `CLEAN` và xuất hiện trong `GET /public/branches` hoặc `GET /public/branches/{id}`; ảnh yard nằm trong `yards[].images`.
+4. `DELETE /api/v1/branches/{branchId}/images/{uploadId}` chỉ ẩn ảnh khỏi catalog; object không bị xóa vật lý. Cấu hình lifecycle xóa prefix `quarantine/` sau một khoảng lưu giữ thích hợp.
+
+URL GET là bearer URL hết hạn sau 10 phút; client phải tải lại catalog khi hết hạn. Logger Android phải che các tham số `X-Amz-*` và không in nguyên URL PUT/GET có chữ ký. Chưa kiểm thử upload thực với R2 vì chưa có cặp S3 key mới và bucket chưa được xác nhận tồn tại.
+
 Dữ liệu seed là **sân demo**, không phải chi nhánh thật: sport `10000000-0000-4000-8000-000000000001`, branch `30000000-0000-4000-8000-000000000001`, yard `40000000-0000-4000-8000-000000000001`, giá 180.000 VND/giờ. Seed không tạo admin hay tài khoản với mật khẩu mặc định.
+
+Sau khi đăng ký tài khoản quản trị và xác minh quyền sở hữu qua quy trình vận hành ngoài API, người có quyền truy cập database có thể bootstrap admin đầu tiên bằng `INSERT INTO identity.roles(user_id,role) VALUES('<verified-user-uuid>','admin')`. Không chạy câu lệnh này với UUID chưa xác minh hoặc trong client Android. Các role tiếp theo cấp/thu hồi qua `/api/v1/admin/roles`, ghi audit.
 
 ## Realtime contract
 
 SSE: `GET http://127.0.0.1:3001/api/v1/events` với Bearer header và `Last-Event-ID` (hoặc query `after`). Event tên `domain.event`, gồm `id,type,payload,created_at,request_id`; heartbeat mỗi 2 giây, retry 3 giây. Không truyền JWT qua query string. Cursor là **chuỗi số**, không ép sang JavaScript Number.
 
-Socket.IO: handshake `auth: {token: accessToken, after: "last-event-id"}`; lắng nghe `domain.event`. Client lưu cursor **sau khi xử lý** và dedupe theo ID. Reconnect phải gửi lại cursor đã xử lý. JWT hết hạn hoặc session revoke sẽ đóng stream/socket. Hiện không có message/conversation/E2E endpoints.
+Socket.IO: handshake `auth: {token: accessToken, after: "last-event-id"}`; lắng nghe `domain.event` và `message.new`. Client lưu cursor **sau khi xử lý** và dedupe theo ID. Reconnect phải gửi lại cursor đã xử lý. JWT hết hạn hoặc session revoke sẽ đóng stream/socket. Có `message.send` nhưng chat hiện là plaintext trên server, không có E2E.
 
 ## Kiểm thử
 
@@ -93,19 +114,22 @@ npm.cmd audit --omit=dev
 
 Chỉ tạo `alobo_test` một lần; nếu đã tồn tại bỏ qua lệnh CREATE DATABASE. CI được cấu hình ở [backend.yml](.github/workflows/backend.yml); cần xem kết quả trên GitHub sau lần push đầu tiên.
 
-Đã test database thật: tranh slot, exclusion constraint khi bỏ qua application lock, adjacent slots, retry/idempotency hash, OTP attempts, refresh reuse, ownership, webhook invalid/duplicate/amount, cancel, expiry/late payment, outbox/notification, OpenAPI validation, SSE/Socket replay.
+Đã test database thật: tranh slot, exclusion constraint, retry/idempotency, OTP/refresh, ownership, webhook/late payment, notification, SSE/Socket replay; thêm membership credit/QR một lần, lớp giới hạn chỗ, voucher quota/order payment, chat invitation/sequence, booking add-on/review, RBAC và thu hồi phiên khi yêu cầu xóa tài khoản. R2 signing/catalog binding dùng khóa giả trong integration test; upload thật cần credential/bucket. Google cũng chưa test provider end-to-end.
 
 ## Phần còn lại của kiến trúc
 
 | Phạm vi | Trạng thái |
 |---|---|
 | Android API client/DTO generation, bind dữ liệu vào UI | Chưa triển khai; không thay đổi Android trong đợt backend này |
-| SMS/email OTP thật, social login, linked account, deletion/re-auth | Chưa tích hợp; social trả 503; config production fail closed |
+| SMS/email OTP thật | Chưa có provider; development OTP không được mở production |
+| Google login/linked account và xóa tài khoản | Code Firebase verify/revocation + explicit link đã có, chưa kiểm với project thật. Deletion request thu hồi phiên; purge và retention policy chưa có |
 | Merchant payment thật, receipt/refund/reconciliation | Chưa có adapter/credential/policy; sandbox không thay thế provider thật |
-| Membership, academy, social event/team/ticket, recurring booking | Phase 2 chưa triển khai |
-| Commerce/order/voucher và add-on pricing | Phase 2 chưa triển khai |
-| S3/media upload/scan, chat/moderation/E2E | Chưa triển khai; không dựng endpoint giả hoặc crypto tự chế |
-| Admin/owner portal, tenant staff RBAC | Phase 3; hiện chỉ có consumer API kiểm tra ownership |
+| Membership/academy/social | Flow miễn phí, credit, ticket QR, team, match/result, lớp/attendance đã có; thanh toán gói/lớp/vé và tournament bracket chưa có |
+| Đặt sân định kỳ | Có booking series tuần, giữ chỗ đồng thời; chưa có thu tiền tự động/gộp cho cả chuỗi |
+| Commerce/order/voucher và booking add-on | Có order/voucher quota và sandbox payment, booking add-on tính phía server; receipt/refund chưa có |
+| R2 ảnh sân/media chung | Ảnh sân decode/re-encode rồi publish bằng GET URL có thời hạn; media chung vẫn chờ review. R2 live test và chính sách/lifecycle cần làm |
+| Chat/moderation/E2E | Plaintext chat và realtime có; thiếu attachment, moderation và E2E |
+| Admin/owner portal, tenant staff RBAC | RBAC API và audit có; chưa có portal, bootstrap admin phải làm thủ công |
 | Production deployment, TLS/gateway, PII encryption, backup/PITR/restore, metrics/tracing/load test | Chưa nghiệm thu |
 
 Không cố deploy production bằng cách đổi `NODE_ENV`: config chủ động từ chối development OTP và sandbox payment. Cần hoàn thành provider adapters, quản lý secret, operational/security checklist trước.
@@ -114,6 +138,6 @@ Không cố deploy production bằng cách đổi `NODE_ENV`: config chủ độ
 
 Chạy migrate trước khi khởi động. Migration đã áp dụng không được sửa; thêm file đánh số tiếp theo. Runner dùng advisory lock và kiểm tra checksum. Không cung cấp destructive rollback tự động: dùng forward migration tương thích ngược, kiểm tra backup/restore trước thay đổi production. Không xóa booking/payment/audit để reset demo.
 
-Outbox pending được retry mỗi 5 giây. BullMQ failed job được giữ lại để kiểm tra/retry, không tự xóa. PostgreSQL là nguồn dữ liệu chuẩn; Redis AOF không thay thế backup database. Worker/realtime chưa có readiness endpoint riêng hay dashboard; đây là việc còn lại trước triển khai vận hành.
+Outbox pending được retry mỗi 5 giây. BullMQ failed job được giữ lại để kiểm tra/retry, không tự xóa. PostgreSQL là nguồn dữ liệu chuẩn; Redis AOF không thay thế backup database. Worker/realtime chưa có readiness endpoint riêng hay dashboard; đây là việc còn lại trước triển khai vận hành. File media chung ở `UPLOADED` **không được tự coi là CLEAN**; chỉ ảnh sân được decode/re-encode mới có thể chuyển `CLEAN`.
 
 Tham chiếu kỹ thuật: [PostgreSQL range/exclusion](https://www.postgresql.org/docs/16/rangetypes.html), [Nest validation](https://docs.nestjs.com/techniques/validation), [Nest raw body](https://docs.nestjs.com/faq/raw-body), [BullMQ job IDs](https://docs.bullmq.io/guide/jobs/job-ids).

@@ -11,6 +11,14 @@ import { BookingModule } from '../../modules/booking/module';
 import { PaymentModule } from '../../modules/payment/module';
 import { NotificationModule } from '../../modules/notification/module';
 import { ContentModule } from '../../modules/content/module';
+import { AccessModule } from '../../packages/access';
+import { MembershipModule } from '../../modules/membership/module';
+import { AcademyModule } from '../../modules/academy/module';
+import { SocialModule } from '../../modules/social/module';
+import { CommerceModule } from '../../modules/commerce/module';
+import { ChatModule } from '../../modules/chat/module';
+import { AdminModule } from '../../modules/admin/module';
+import { MediaModule } from '../../modules/media/module';
 @Public() @ApiTags('health') @Controller('health')
 class HealthController {
   constructor(private readonly db: Database, private readonly redis: RedisService) {}
@@ -24,8 +32,8 @@ class HealthController {
   }
 }
 @Module({
-  imports: [DatabaseModule, RedisModule, AuthModule, IdempotencyModule, IdentityModule, CatalogModule,
-    BookingModule, PaymentModule, NotificationModule, ContentModule],
+  imports: [DatabaseModule, RedisModule, AuthModule, IdempotencyModule, AccessModule, IdentityModule, CatalogModule,
+    BookingModule, PaymentModule, NotificationModule, ContentModule, MembershipModule, AcademyModule, SocialModule, CommerceModule, ChatModule, AdminModule, MediaModule],
   controllers: [HealthController], providers: [{ provide: APP_GUARD, useClass: AuthGuard }]
 })
 export class ApiModule {}

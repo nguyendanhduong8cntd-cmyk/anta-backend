@@ -8,7 +8,7 @@ import { PaymentService } from './service';
 export class PaymentController {
   constructor(private readonly payments: PaymentService) {}
   @ApiBearerAuth() @Post('payment-intents') @ApiHeader({ name: 'Idempotency-Key', required: true })
-  create(@CurrentUser() user: Principal, @Body() dto: IntentDto, @Headers('idempotency-key') key?: string) { return this.payments.create(user.userId, dto.bookingId, key); }
+  create(@CurrentUser() user: Principal, @Body() dto: IntentDto, @Headers('idempotency-key') key?: string) { return this.payments.create(user.userId, dto, key); }
   @ApiBearerAuth() @Get('payment-intents/:id') get(@CurrentUser() user: Principal, @Param('id', new ParseUUIDPipe({ version: '4' })) id: string) { return this.payments.get(user.userId, id); }
   @Public() @Post('webhooks/payments/:provider')
   @ApiHeader({ name: 'X-Webhook-Timestamp', required: true }) @ApiHeader({ name: 'X-Webhook-Signature', required: true })

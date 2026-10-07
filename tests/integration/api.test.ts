@@ -123,7 +123,7 @@ test('registration/login/profile/logout/refresh rotation and reuse revoke the fa
   const login = await request('/public/auth/login', 'POST', { identifier: user.identifier, password: 'test-password-long-123', deviceId: 'x' }); assert.equal(login.status, 201);
   assert.equal((await request('/auth/logout', 'POST', undefined, login.body.data.accessToken)).status, 201);
   assert.equal((await request('/users/me', 'GET', undefined, login.body.data.accessToken)).status, 401);
-  assert.equal((await request('/public/auth/social', 'POST', {})).status, 503);
+  assert.equal((await request('/public/auth/social', 'POST', { firebaseIdToken: 'x'.repeat(100), deviceId: 'test-device' })).status, 503);
 });
 test('parallel clients cannot hold the same slot; adjacent slots are allowed', async () => {
   const a = await account('race-a'), b = await account('race-b'), target = slot();

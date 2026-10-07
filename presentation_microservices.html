@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Báo Cáo Thuyết Trình: Giao Tiếp Service-to-Service trong Microservices</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  @page {
+    size: 297mm 210mm;
+    margin: 0;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #0b1120;
+    color: #e2e8f0;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .slide {
+    width: 297mm;
+    height: 210mm;
+    max-height: 210mm;
+    page-break-after: always;
+    page-break-inside: avoid;
+    overflow: hidden;
+    position: relative;
+    padding: 24px 34px 22px 34px;
+    background: radial-gradient(circle at 90% 10%, rgba(30, 58, 138, 0.18), transparent 45%),
+                radial-gradient(circle at 10% 90%, rgba(13, 148, 136, 0.12), transparent 40%),
+                #0b1120;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  /* Header Bar */
+  .slide-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #1e293b;
+    margin-bottom: 14px;
+  }
+
+  .slide-tag-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .badge-module {
+    background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .badge-time {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #fbbf24;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  .slide-title {
+    font-size: 21px;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.3px;
+  }
+
+  .slide-subtitle {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-top: 1px;
+  }
+
+  .slide-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    background: #131d33;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #23314f;
+    white-space: nowrap;
+  }
+
+  /* Footer Bar */
+  .slide-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid #1e293b;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 10px;
+  }
+
+  .footer-proj {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dot-status {
+    width: 7px;
+    height: 7px;
+    background: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* Content Layouts */
+  .slide-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .grid-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .grid-3col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .grid-40-60 {
+    display: grid;
+    grid-template-columns: 4fr 6fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .grid-55-45 {
+    display: grid;
+    grid-template-columns: 55fr 45fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  /* Cards */
+  .card {
+    background: rgba(19, 29, 51, 0.75);
+    border: 1px solid #23314f;
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    backdrop-filter: blur(8px);
+  }
+
+  .card-highlight {
+    border-color: #3b82f6;
+    background: rgba(29, 43, 76, 0.85);
+  }
+
+  .card-emerald {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(6, 78, 59, 0.2);
+  }
+
+  .card-rose {
+    border-color: rgba(244, 63, 94, 0.4);
+    background: rgba(136, 19, 55, 0.2);
+  }
+
+  .card-amber {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(120, 53, 15, 0.2);
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #38bdf8;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .card-p {
+    font-size: 12px;
+    color: #cbd5e1;
+    margin-bottom: 6px;
+  }
+
+  /* Code Blocks */
+  pre {
+    background: #060a12;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 10.5px;
+    color: #e2e8f0;
+    line-height: 1.4;
+    overflow-x: hidden;
+  }
+
+  .kw { color: #f43f5e; font-weight: 600; }
+  .type { color: #38bdf8; font-weight: 600; }
+  .fn { color: #a855f7; }
+  .str { color: #34d399; }
+  .num { color: #fbbf24; }
+  .anno { color: #f59e0b; }
+  .cm { color: #64748b; font-style: italic; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #1e293b;
+  }
+
+  th {
+    background: #172554;
+    color: #93c5fd;
+    text-align: left;
+    padding: 8px 10px;
+    font-weight: 700;
+    border-bottom: 1px solid #23314f;
+    font-size: 11px;
+  }
+
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #1e293b;
+    color: #cbd5e1;
+    vertical-align: middle;
+  }
+
+  tr:nth-child(even) td {
+    background: rgba(30, 41, 59, 0.3);
+  }
+
+  /* Lists */
+  ul.feature-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  ul.feature-list li {
+    font-size: 12px;
+    color: #cbd5e1;
+    margin-bottom: 6px;
+    position: relative;
+    padding-left: 18px;
+  }
+
+  ul.feature-list li::before {
+    content: "▹";
+    position: absolute;
+    left: 0;
+    color: #38bdf8;
+    font-weight: bold;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .pill-green { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .pill-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+  .pill-amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .pill-red { background: rgba(244, 63, 94, 0.2); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
+  .pill-purple { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+
+  /* Sequence & Flow SVG Diagrams */
+  .diagram-container {
+    background: #070d18;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* Cover Slide Styling */
+  .cover-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+    padding: 0 40px;
+    position: relative;
+  }
+
+  .cover-badge {
+    background: linear-gradient(90deg, #0284c7, #3b82f6);
+    color: white;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 2px;
+    padding: 6px 18px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+    text-transform: uppercase;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+
+  .cover-title {
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1.25;
+    background: linear-gradient(135deg, #ffffff 30%, #93c5fd 70%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 14px;
+    max-width: 900px;
+  }
+
+  .cover-desc {
+    font-size: 15px;
+    color: #94a3b8;
+    max-width: 760px;
+    margin-bottom: 26px;
+    line-height: 1.5;
+  }
+
+  .cover-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 880px;
+    margin-top: 10px;
+  }
+
+  .meta-box {
+    background: rgba(19, 29, 51, 0.6);
+    border: 1px solid #23314f;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: left;
+  }
+
+  .meta-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .meta-val {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin-top: 2px;
+  }
+
+  /* Exit ticket style */
+  .ticket-card {
+    background: rgba(15, 23, 42, 0.7);
+    border-left: 4px solid #3b82f6;
+    padding: 8px 12px;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 8px;
+  }
+  .ticket-card.alt {
+    border-left-color: #10b981;
+  }
+  .ticket-q {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 3px;
+  }
+  .ticket-a {
+    font-size: 11px;
+    color: #cbd5e1;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: TRANG BÌA -->
+<div class="slide">
+  <div class="cover-container">
+    <div class="cover-badge">BÁO CÁO CHUYÊN ĐỀ & THUYẾT TRÌNH MICROSERVICES</div>
+    <h1 class="cover-title">GIAO TIẾP SERVICE-TO-SERVICE TRONG HỆ THỐNG ĐẶT SÂN THỂ THAO</h1>
+    <p class="cover-desc">
+      Khảo sát phân tích kiến trúc, triển khai đồng bộ REST API (Spring Boot 3 & FastAPI Python), cấu hình Timeout, xử lý lỗi mạng & tích hợp Message Broker RabbitMQ bất đồng bộ.
+    </p>
+
+    <div class="cover-meta">
+      <div class="meta-box">
+        <div class="meta-label">DỰ ÁN ÁP DỤNG</div>
+        <div class="meta-val">Alobo Court Platform (<code>D:\hdvackend</code>)</div>
+      </div>
+      <div class="meta-box">
+        <div class="meta-label">CÔNG NGHỆ CHÍNH</div>
+        <div class="meta-val">Spring Boot 3, FastAPI, RabbitMQ</div>
+      </div>
+      <div class="meta-box">
+        <div class="meta-label">QUY MÔ LAB</div>
+        <div class="meta-val">5 Chuyên đề (150 Phút)</div>
+      </div>
+      <div class="meta-box">
+        <div class="meta-label">MỤC TIÊU ĐẠT ĐƯỢC</div>
+        <div class="meta-val">Resilient & Event-Driven Services</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Khoa Công Nghệ Thông Tin & Kỹ Thuật Phần Mềm</div>
+  </div>
+</div>
+
+<!-- SLIDE 2: MỤC LỤC & TỔNG QUAN HỆ THỐNG -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">TỔNG QUAN KHÓA HỌC</span>
+        <span class="badge-time">150 PHÚT TOÀN DIỆN</span>
+      </div>
+      <div class="slide-title">Lộ Trình Thuyết Trình & Kiến Trúc Tổng Thể</div>
+      <div class="slide-subtitle">Nắm vững các khía cạnh từ phân tích, lập trình đến vận hành khả năng chịu lỗi</div>
+    </div>
+    <div class="slide-num">SLIDE 02 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-55-45">
+      <!-- 5 Bài học -->
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="card" style="padding: 9px 12px; border-left: 4px solid #38bdf8;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #f1f5f9; font-size: 12px;">Bài 1: Khảo sát & Phân tích Giao tiếp Service-to-Service</strong>
+            <span class="pill pill-blue">20 PHÚT</span>
+          </div>
+          <p class="card-p" style="font-size: 11px; margin-top: 2px; margin-bottom: 0;">Liệt kê 5 service, phân tích dependency, định nghĩa hợp đồng REST, sơ đồ luồng dữ liệu.</p>
+        </div>
+
+        <div class="card" style="padding: 9px 12px; border-left: 4px solid #10b981;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #f1f5f9; font-size: 12px;">Bài 2: Triển khai Giao tiếp Bằng Spring Boot 3</strong>
+            <span class="pill pill-green">35 PHÚT</span>
+          </div>
+          <p class="card-p" style="font-size: 11px; margin-top: 2px; margin-bottom: 0;">Xây dựng field-service (Provider) & booking-service (Consumer với RestClient, 200/404 handling).</p>
+        </div>
+
+        <div class="card" style="padding: 9px 12px; border-left: 4px solid #a855f7;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #f1f5f9; font-size: 12px;">Bài 3: Tiêu thụ API bằng Framework khác (FastAPI Python)</strong>
+            <span class="pill pill-purple">35 PHÚT</span>
+          </div>
+          <p class="card-p" style="font-size: 11px; margin-top: 2px; margin-bottom: 0;">Viết lại consumer bằng FastAPI + HTTPX; lập bảng so sánh 5 tiêu chí với Spring Boot.</p>
+        </div>
+
+        <div class="card" style="padding: 9px 12px; border-left: 4px solid #f59e0b;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #f1f5f9; font-size: 12px;">Bài 4: Xử lý Lỗi, Timeout & Giao tiếp Bất đồng bộ RabbitMQ</strong>
+            <span class="pill pill-amber">40 PHÚT</span>
+          </div>
+          <p class="card-p" style="font-size: 11px; margin-top: 2px; margin-bottom: 0;">Bắt lỗi mạng Connection Refused, cấu hình timeout 3s (504), Producer & Consumer RabbitMQ.</p>
+        </div>
+
+        <div class="card" style="padding: 9px 12px; border-left: 4px solid #f43f5e;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #f1f5f9; font-size: 12px;">Bài 5: Thử thách Mở rộng & Giải đáp 5 Exit Tickets</strong>
+            <span class="pill pill-red">20 PHÚT</span>
+          </div>
+          <p class="card-p" style="font-size: 11px; margin-top: 2px; margin-bottom: 0;">Loại bỏ hard-code qua file cấu hình, cơ chế Retry/Fallback, giải đáp toàn diện 5 câu hỏi lý thuyết.</p>
+        </div>
+      </div>
+
+      <!-- Sơ đồ kiến trúc microservices tổng quan -->
+      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="card-title">KIẾN TRÚC TỔNG THỂ MICROSERVICES</div>
+        <div style="text-align: center; margin: auto; width: 100%;">
+          <svg viewBox="0 0 380 230" style="width: 100%; height: auto; max-height: 200px;">
+            <!-- Client -->
+            <rect x="140" y="5" width="100" height="30" rx="6" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5"/>
+            <text x="190" y="24" fill="#93c5fd" font-size="11" font-weight="700" text-anchor="middle">Mobile/Web Client</text>
+            <line x1="190" y1="35" x2="190" y2="55" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+            <!-- Booking Service -->
+            <rect x="120" y="55" width="140" height="38" rx="8" fill="#1e3a8a" stroke="#60a5fa" stroke-width="2"/>
+            <text x="190" y="73" fill="#ffffff" font-size="12" font-weight="800" text-anchor="middle">Booking Service</text>
+            <text x="190" y="86" fill="#93c5fd" font-size="9" text-anchor="middle">Spring Boot / FastAPI</text>
+
+            <!-- Sync HTTP call to Field Service -->
+            <line x1="120" y1="74" x2="45" y2="74" stroke="#10b981" stroke-width="2"/>
+            <polyline points="50,70 42,74 50,78" fill="none" stroke="#10b981" stroke-width="2"/>
+            <text x="82" y="67" fill="#34d399" font-size="8" font-weight="700" text-anchor="middle">REST (Sync)</text>
+
+            <!-- Field Service -->
+            <rect x="5" y="55" width="40" height="110" rx="6" fill="#064e3b" stroke="#10b981" stroke-width="1.5"/>
+            <text x="25" y="115" fill="#34d399" font-size="10" font-weight="700" text-anchor="middle" transform="rotate(-90 25 115)">Field Service</text>
+
+            <!-- Other HTTP Services -->
+            <line x1="260" y1="74" x2="330" y2="74" stroke="#64748b" stroke-width="1.5"/>
+            <rect x="330" y="55" width="45" height="50" rx="6" fill="#1f2937" stroke="#4b5563" stroke-width="1.5"/>
+            <text x="352" y="83" fill="#9ca3af" font-size="8.5" text-anchor="middle">Customer</text>
+            <text x="352" y="95" fill="#9ca3af" font-size="8.5" text-anchor="middle">Service</text>
+
+            <!-- Payment Service -->
+            <line x1="240" y1="93" x2="330" y2="135" stroke="#64748b" stroke-width="1.5"/>
+            <rect x="330" y="120" width="45" height="50" rx="6" fill="#1f2937" stroke="#4b5563" stroke-width="1.5"/>
+            <text x="352" y="148" fill="#9ca3af" font-size="8.5" text-anchor="middle">Payment</text>
+            <text x="352" y="160" fill="#9ca3af" font-size="8.5" text-anchor="middle">Service</text>
+
+            <!-- Async RabbitMQ Flow -->
+            <line x1="190" y1="93" x2="190" y2="130" stroke="#f59e0b" stroke-width="2"/>
+            <polyline points="186,125 190,132 194,125" fill="none" stroke="#f59e0b" stroke-width="2"/>
+            <text x="190" y="116" fill="#fbbf24" font-size="8.5" font-weight="700" text-anchor="middle">RabbitMQ Event</text>
+
+            <!-- RabbitMQ Broker -->
+            <rect x="110" y="132" width="160" height="34" rx="6" fill="#78350f" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="190" y="148" fill="#fef3c7" font-size="10.5" font-weight="800" text-anchor="middle">RabbitMQ Broker</text>
+            <text x="190" y="160" fill="#fde68a" font-size="8" text-anchor="middle">Exchange: booking.exchange</text>
+
+            <!-- Notification Service -->
+            <line x1="190" y1="166" x2="190" y2="190" stroke="#f59e0b" stroke-width="2"/>
+            <polyline points="186,185 190,192 194,185" fill="none" stroke="#f59e0b" stroke-width="2"/>
+            <rect x="110" y="192" width="160" height="32" rx="6" fill="#581c87" stroke="#c084fc" stroke-width="1.5"/>
+            <text x="190" y="212" fill="#f3e8ff" font-size="11" font-weight="700" text-anchor="middle">Notification Service (Consumer)</text>
+          </svg>
+        </div>
+        <div style="font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid #1e293b; padding-top: 6px;">
+          Đồng bộ với kho mã nguồn dự án: <code>NestJS / Express</code> &amp; <code>python_backend (FastAPI)</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Phần Mở Đầu</div>
+  </div>
+</div>
+
+<!-- SLIDE 3: BÀI 1 - KHẢO SÁT DANH SÁCH 5 SERVICES -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 1: KHẢO SÁT & PHÂN TÍCH</span>
+        <span class="badge-time">20 PHÚT</span>
+      </div>
+      <div class="slide-title">1.1 Khảo Sát Danh Sách 5 Microservices Cốt Lõi</div>
+      <div class="slide-subtitle">Phân định ranh giới nghiệp vụ (Bounded Contexts) chuẩn Domain-Driven Design (DDD)</div>
+    </div>
+    <div class="slide-num">SLIDE 03 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 18%;">Tên Microservice</th>
+          <th style="width: 14%;">Vai Trò / Phân Loại</th>
+          <th style="width: 44%;">Trách Nhiệm Nghiệp Vụ Cốt Lõi</th>
+          <th style="width: 12%;">Port Chuẩn</th>
+          <th style="width: 12%;">Giao Thức</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color: #34d399;">Field Service</strong></td>
+          <td><span class="pill pill-green">Data Provider</span></td>
+          <td>Quản lý danh mục sân (catalog/yards), môn thể thao (bóng đá, pickleball, cầu lông), bảng giá giờ cao điểm/thấp điểm, kiểm tra trạng thái hoạt động của sân (AVAILABLE / MAINTENANCE).</td>
+          <td><code>:8081</code></td>
+          <td>HTTP / REST</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #60a5fa;">Booking Service</strong></td>
+          <td><span class="pill pill-blue">Core Consumer</span></td>
+          <td>Xử lý đặt lịch sân, khóa khung giờ (Hold slot), xác thực sự tồn tại và khả dụng của sân từ Field Service, lưu trữ đơn đặt sân và phát sự kiện hoàn tất.</td>
+          <td><code>:8080</code></td>
+          <td>HTTP & AMQP</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #f1f5f9;">Customer Service</strong></td>
+          <td><span class="pill pill-blue">Identity Provider</span></td>
+          <td>Quản lý thông tin định danh khách hàng (Profile, E.164 Phone, OTP Auth, phân quyền role branch_owner/customer), xác minh tư cách người đặt sân.</td>
+          <td><code>:8082</code></td>
+          <td>HTTP / REST</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #f1f5f9;">Payment Service</strong></td>
+          <td><span class="pill pill-blue">Billing Service</span></td>
+          <td>Tạo mã thanh toán (Payment Intent), xác nhận giao dịch cọc/toàn phần qua Sandbox/Ngân hàng, sinh mã hóa đơn và đối soát doanh thu chi nhánh.</td>
+          <td><code>:8083</code></td>
+          <td>HTTP / Webhook</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #c084fc;">Notification Service</strong></td>
+          <td><span class="pill pill-purple">Event Consumer</span></td>
+          <td>Lắng nghe sự kiện từ hàng đợi RabbitMQ, gửi thông báo đẩy (FCM Push), tin nhắn SMS/Zalo OTP, Email xác nhận lịch đặt sân cho cả khách hàng và chủ sân.</td>
+          <td><code>:8084</code></td>
+          <td>RabbitMQ (AMQP)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card card-highlight" style="margin-top: 4px;">
+      <div class="card-title">MỐI LIÊN HỆ VỚI DỰ ÁN THỰC TẾ D:\hdvackend</div>
+      <p class="card-p" style="font-size: 11.5px; margin-bottom: 0;">
+        Trong repo <code>D:\hdvackend</code>, các module này được hiện thực hóa ở cả hai phiên bản: <strong>NodeJS/TypeScript</strong> (NestJS/Express) và <strong>Python Backend</strong> (<code>python_backend/alobo_api</code> với FastAPI). Điều này mang lại sự linh hoạt tối đa khi triển khai đa nền tảng (Polyglot Microservices).
+      </p>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 1: Khảo sát & Phân tích</div>
+  </div>
+</div>
+
+<!-- SLIDE 4: BÀI 1 - PHÂN TÍCH DEPENDENCY & CONTRACT -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 1: KHẢO SÁT & PHÂN TÍCH</span>
+        <span class="badge-time">20 PHÚT</span>
+      </div>
+      <div class="slide-title">1.2 Phân Tích Quan Hệ Phụ Thuộc (Dependency) & API Contract</div>
+      <div class="slide-subtitle">Bảo đảm tính toàn vẹn nghiệp vụ (Business Integrity) trước khi ghi nhận đơn đặt sân</div>
+    </div>
+    <div class="slide-num">SLIDE 04 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: Phân tích Dependency -->
+      <div class="card">
+        <div class="card-title">TẠI SAO PHẢI XÁC THỰC SÂN QUA FIELD-SERVICE?</div>
+        <ul class="feature-list">
+          <li><strong>Nguyên tắc Single Source of Truth:</strong> Thông tin sân bãi, giá thuê theo giờ và trạng thái bảo trì chỉ do <em>Field Service</em> toàn quyền sở hữu và quản lý trong cơ sở dữ liệu riêng.</li>
+          <li><strong>Ngăn chặn Đặt sân Hư hỏng/Đóng cửa:</strong> Sân có thể đang ở trạng thái <code>MAINTENANCE</code> hoặc <code>CLOSED</code>. Nếu không kiểm tra, hệ thống sẽ xác nhận lịch cho một sân không sử dụng được.</li>
+          <li><strong>Tránh sai lệch Doanh thu (Pricing Integrity):</strong> Giá thuê sân thực tế (<code>pricePerHour</code>) cần được lấy chính xác tại thời điểm đặt để tính tổng cọc, không lưu cứng ở client.</li>
+          <li><strong>Phụ thuộc Chiều Một (One-way Dependency):</strong> Booking Service phụ thuộc vào Field Service; Field Service hoàn toàn không biết và không phụ thuộc vào Booking Service.</li>
+        </ul>
+      </div>
+
+      <!-- Cột phải: Định nghĩa API Contract -->
+      <div class="card">
+        <div class="card-title">HỢP ĐỒNG API: GET /api/fields/{id}</div>
+        <div style="margin-bottom: 6px;">
+          <span class="pill pill-green" style="font-size: 11px;">GET</span>
+          <code style="color: #f1f5f9; font-size: 12px; font-weight: 600;">/api/fields/{id}</code>
+        </div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong>Phản hồi thành công (200 OK):</strong></div>
+        <pre><span class="cm">// Content-Type: application/json</span>
+{
+  <span class="str">"id"</span>: <span class="str">"f-101"</span>,
+  <span class="str">"name"</span>: <span class="str">"Sân bóng đá cỏ nhân tạo 7 người - Sân A"</span>,
+  <span class="str">"sportType"</span>: <span class="str">"FOOTBALL"</span>,
+  <span class="str">"pricePerHour"</span>: <span class="num">350000.0</span>,
+  <span class="str">"status"</span>: <span class="str">"AVAILABLE"</span>
+}</pre>
+        <div class="card-p" style="font-size: 11px; margin-top: 6px; margin-bottom: 4px;"><strong>Phản hồi khi không tìm thấy sân (404 Not Found):</strong></div>
+        <pre>{
+  <span class="str">"timestamp"</span>: <span class="str">"2026-10-05T14:00:00Z"</span>,
+  <span class="str">"status"</span>: <span class="num">404</span>,
+  <span class="str">"error"</span>: <span class="str">"Not Found"</span>,
+  <span class="str">"message"</span>: <span class="str">"Sân thể thao với mã 'f-999' không tồn tại!"</span>
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 1: Khảo sát & Phân tích</div>
+  </div>
+</div>
+
+<!-- SLIDE 5: BÀI 1 - SƠ ĐỒ LUỒNG DỮ LIỆU ĐỒNG BỘ -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 1: KHẢO SÁT & PHÂN TÍCH</span>
+        <span class="badge-time">20 PHÚT</span>
+      </div>
+      <div class="slide-title">1.3 Sơ Đồ Luồng Dữ Liệu Đồng Bộ HTTP/REST</div>
+      <div class="slide-subtitle">Mô hình tuần tự (Sequence Flow) giữa Booking Service và Field Service</div>
+    </div>
+    <div class="slide-num">SLIDE 05 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-40-60">
+      <!-- Cột trái: Diễn giải luồng dữ liệu -->
+      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div class="card-title">CÁC BƯỚC THỰC HIỆN TUẦN TỰ</div>
+          <ol style="padding-left: 18px; font-size: 11.5px; color: #cbd5e1; line-height: 1.55;">
+            <li style="margin-bottom: 5px;"><strong>Client gửi yêu cầu đặt sân:</strong> Gửi request <code>POST /api/bookings</code> với dữ liệu: <code>customerId, fieldId, bookingDate, startTime, endTime</code>.</li>
+            <li style="margin-bottom: 5px;"><strong>Booking Service chặn luồng:</strong> Tạm ngưng việc ghi cơ sở dữ liệu để thực hiện cuộc gọi đồng bộ <code>GET /api/fields/{fieldId}</code> sang Field Service.</li>
+            <li style="margin-bottom: 5px;"><strong>Field Service truy vấn Catalog DB:</strong>
+              <br>- Nếu sân tồn tại: trả <code>200 OK</code> kèm JSON thông tin sân.
+              <br>- Nếu không có: trả <code>404 Not Found</code>.
+            </li>
+            <li style="margin-bottom: 5px;"><strong>Phân nhánh xử lý:</strong>
+              <br>- <em>Hợp lệ (200 OK):</em> Tạo bản ghi Booking, trả về <code>201 Created</code> cho Client.
+              <br>- <em>Không tìm thấy (404):</em> Hủy giao dịch, trả về <code>404 Error</code> cho Client.
+            </li>
+          </ol>
+        </div>
+        <div style="background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 6px; padding: 6px 10px; font-size: 11px; color: #38bdf8;">
+          <strong>Đặc điểm Đồng bộ:</strong> Luồng xử lý của Booking Service phải chờ (blocking) cho đến khi Field Service hoàn thành và trả phản hồi về mạng.
+        </div>
+      </div>
+
+      <!-- Cột phải: Sơ đồ SVG Sequence Flow -->
+      <div class="diagram-container">
+        <svg viewBox="0 0 460 250" style="width: 100%; height: auto; max-height: 240px;">
+          <!-- Participants Headers -->
+          <rect x="15" y="10" width="90" height="26" rx="5" fill="#1e293b" stroke="#64748b"/>
+          <text x="60" y="27" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">Client (App)</text>
+
+          <rect x="175" y="10" width="110" height="26" rx="5" fill="#1e3a8a" stroke="#3b82f6"/>
+          <text x="230" y="27" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle">Booking Service</text>
+
+          <rect x="345" y="10" width="100" height="26" rx="5" fill="#064e3b" stroke="#10b981"/>
+          <text x="395" y="27" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle">Field Service</text>
+
+          <!-- Lifelines -->
+          <line x1="60" y1="36" x2="60" y2="240" stroke="#334155" stroke-dasharray="3,3"/>
+          <line x1="230" y1="36" x2="230" y2="240" stroke="#334155" stroke-dasharray="3,3"/>
+          <line x1="395" y1="36" x2="395" y2="240" stroke="#334155" stroke-dasharray="3,3"/>
+
+          <!-- Step 1: POST /api/bookings -->
+          <line x1="60" y1="60" x2="225" y2="60" stroke="#38bdf8" stroke-width="1.5"/>
+          <polyline points="220,56 228,60 220,64" fill="#38bdf8"/>
+          <text x="145" y="54" fill="#38bdf8" font-size="9.5" font-weight="600" text-anchor="middle">1. POST /api/bookings {fieldId: f-101}</text>
+
+          <!-- Step 2: GET /api/fields/f-101 (Sync) -->
+          <line x1="230" y1="85" x2="390" y2="85" stroke="#10b981" stroke-width="1.8"/>
+          <polyline points="385,81 393,85 385,89" fill="#10b981"/>
+          <text x="312" y="79" fill="#34d399" font-size="9.5" font-weight="600" text-anchor="middle">2. GET /api/fields/f-101 (HTTP Synchronous)</text>
+
+          <!-- Step 3: Response from Field Service -->
+          <line x1="395" y1="120" x2="235" y2="120" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <polyline points="242,116 233,120 242,124" fill="#10b981"/>
+          <text x="312" y="114" fill="#34d399" font-size="9.5" font-weight="600" text-anchor="middle">3. 200 OK {name, price, status: "AVAILABLE"}</text>
+
+          <!-- Step 4: Self Save Booking -->
+          <path d="M 230,135 L 255,135 L 255,152 L 232,152" fill="none" stroke="#60a5fa" stroke-width="1.5"/>
+          <polyline points="238,149 230,152 238,155" fill="#60a5fa"/>
+          <text x="262" y="146" fill="#93c5fd" font-size="9" text-anchor="start">4. Lưu Booking vào DB</text>
+
+          <!-- Step 5: Return to Client -->
+          <line x1="230" y1="175" x2="65" y2="175" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <polyline points="72,171 63,175 72,179" fill="#38bdf8"/>
+          <text x="145" y="169" fill="#38bdf8" font-size="9.5" font-weight="600" text-anchor="middle">5. 201 Created {bookingId: "BK-001"}</text>
+
+          <!-- Alternative branch line: 404 Case -->
+          <rect x="25" y="195" width="410" height="40" rx="4" fill="rgba(244,63,94,0.08)" stroke="#f43f5e" stroke-dasharray="2,2"/>
+          <text x="35" y="210" fill="#fb7185" font-size="9" font-weight="700">Trường hợp Sân không tồn tại (404):</text>
+          <text x="35" y="225" fill="#cbd5e1" font-size="8.5">Field Service trả 404 Not Found &rarr; Booking Service ngắt luồng, trả 404 thông báo lỗi ngay cho Client</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 1: Khảo sát & Phân tích</div>
+  </div>
+</div>
+
+<!-- SLIDE 6: BÀI 2 - SPRING BOOT PROVIDER (FIELD-SERVICE) -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 2: TRIỂN KHAI VỚI SPRING BOOT</span>
+        <span class="badge-time">35 PHÚT</span>
+      </div>
+      <div class="slide-title">2.1 Xây Dựng Provider (field-service) Bằng Spring Boot 3</div>
+      <div class="slide-subtitle">Triển khai REST Endpoint GET /api/fields/{id} chuẩn RESTful & HTTP Status Code</div>
+    </div>
+    <div class="slide-num">SLIDE 06 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: Controller Code -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">FieldController.java</strong> (Provider Service - Port 8081)</div>
+        <pre><span class="anno">@RestController</span>
+<span class="anno">@RequestMapping</span>(<span class="str">"/api/fields"</span>)
+<span class="kw">public class</span> <span class="type">FieldController</span> {
+    <span class="kw">private final</span> <span class="type">Map</span>&lt;<span class="type">String</span>, <span class="type">FieldResponse</span>&gt; db = <span class="kw">new</span> <span class="type">ConcurrentHashMap</span>&lt;&gt;();
+
+    <span class="kw">public</span> <span class="fn">FieldController</span>() {
+        <span class="cm">// Dữ liệu mẫu tương đồng Alobo Catalog</span>
+        db.put(<span class="str">"f-101"</span>, <span class="kw">new</span> <span class="type">FieldResponse</span>(
+            <span class="str">"f-101"</span>, <span class="str">"Sân bóng cỏ nhân tạo 7 người - Sân A"</span>,
+            <span class="str">"FOOTBALL"</span>, <span class="kw">new</span> <span class="type">BigDecimal</span>(<span class="str">"350000"</span>), <span class="str">"AVAILABLE"</span>
+        ));
+    }
+
+    <span class="anno">@GetMapping</span>(<span class="str">"/{id}"</span>)
+    <span class="kw">public</span> <span class="type">ResponseEntity</span>&lt;?&gt; <span class="fn">getFieldById</span>(<span class="anno">@PathVariable</span> <span class="type">String</span> id) {
+        <span class="type">FieldResponse</span> field = db.get(id);
+        <span class="kw">if</span> (field == <span class="kw">null</span>) {
+            <span class="cm">// Trả về 404 Not Found nếu không tìm thấy ID</span>
+            <span class="kw">return</span> <span class="type">ResponseEntity</span>.status(<span class="type">HttpStatus</span>.NOT_FOUND)
+                .body(<span class="type">Map</span>.of(<span class="str">"status"</span>, <span class="num">404</span>, <span class="str">"error"</span>, <span class="str">"Sân '"</span> + id + <span class="str">"' không tồn tại"</span>));
+        }
+        <span class="cm">// Trả về 200 OK kèm thông tin JSON</span>
+        <span class="kw">return</span> <span class="type">ResponseEntity</span>.ok(field);
+    }
+}</pre>
+      </div>
+
+      <!-- Cột phải: DTO Record & Phân tích cơ chế -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="card">
+          <div class="card-title">DTO JAVA RECORD (IMMUTABLE DATA)</div>
+          <pre><span class="kw">public record</span> <span class="type">FieldResponse</span>(
+    <span class="type">String</span> id,
+    <span class="type">String</span> name,
+    <span class="type">String</span> sportType,
+    <span class="type">BigDecimal</span> pricePerHour,
+    <span class="type">String</span> status
+) {}</pre>
+        </div>
+
+        <div class="card card-emerald">
+          <div class="card-title" style="color: #34d399;">NGHIỆP VỤ & NGUYÊN TẮC CỐT LÕI</div>
+          <ul class="feature-list">
+            <li><strong>Tính Idempotent (Bảo toàn trạng thái):</strong> Phương thức <code>GET</code> không làm thay đổi trạng thái dữ liệu, an toàn cho việc gọi lại nhiều lần (Retry).</li>
+            <li><strong>Chuẩn hóa Mã Lỗi HTTP:</strong>
+              <br>• Trả <code>200 OK</code> khi tìm thấy bản ghi.
+              <br>• Trả <code>404 Not Found</code> khi ID không có trong Database. Tuyệt đối không trả về 200 kèm payload rỗng.
+            </li>
+            <li><strong>Tính tương thích cao:</strong> Dữ liệu JSON được tuần tự hóa tự động qua Jackson, hỗ trợ mọi Consumer dù viết bằng bất cứ ngôn ngữ nào.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 2: Triển khai Spring Boot</div>
+  </div>
+</div>
+
+<!-- SLIDE 7: BÀI 2 - SPRING BOOT CONSUMER (BOOKING-SERVICE) -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 2: TRIỂN KHAI VỚI SPRING BOOT</span>
+        <span class="badge-time">35 PHÚT</span>
+      </div>
+      <div class="slide-title">2.2 Xây Dựng Consumer (booking-service) Với RestClient</div>
+      <div class="slide-subtitle">Tiếp nhận đặt sân POST /api/bookings, gọi sang Field Service & xử lý 200 OK / 404 Not Found</div>
+    </div>
+    <div class="slide-num">SLIDE 07 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-55-45">
+      <!-- Cột trái: Booking Service Code -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">BookingController.java</strong> (Consumer - Port 8080)</div>
+        <pre><span class="anno">@RestController</span>
+<span class="anno">@RequestMapping</span>(<span class="str">"/api/bookings"</span>)
+<span class="kw">public class</span> <span class="type">BookingController</span> {
+    <span class="kw">private final</span> <span class="type">RestClient</span> fieldClient;
+
+    <span class="kw">public</span> <span class="fn">BookingController</span>(<span class="type">RestClient</span>.Builder builder) {
+        <span class="kw">this</span>.fieldClient = builder.baseUrl(<span class="str">"http://localhost:8081"</span>).build();
+    }
+
+    <span class="anno">@PostMapping</span>
+    <span class="kw">public</span> <span class="type">ResponseEntity</span>&lt;?&gt; <span class="fn">createBooking</span>(<span class="anno">@RequestBody</span> <span class="type">BookingRequest</span> req) {
+        <span class="kw">try</span> {
+            <span class="cm">// 1. Gọi sang field-service kiểm tra sự tồn tại của fieldId</span>
+            <span class="type">FieldDto</span> field = fieldClient.get()
+                .uri(<span class="str">"/api/fields/{id}"</span>, req.fieldId())
+                .retrieve()
+                .onStatus(<span class="type">HttpStatusCode</span>::is4xxClientError, (request, response) -&gt; {
+                    <span class="kw">throw new</span> <span class="type">FieldNotFoundException</span>(<span class="str">"Sân '"</span> + req.fieldId() + <span class="str">"' không tồn tại!"</span>);
+                })
+                .body(<span class="type">FieldDto</span>.<span class="kw">class</span>);
+
+            <span class="cm">// 2. Nhận 200 OK: Tiếp tục lưu đơn đặt sân vào DB</span>
+            <span class="type">Booking</span> saved = <span class="kw">new</span> <span class="type">Booking</span>(<span class="type">UUID</span>.randomUUID().toString(), req, field);
+            <span class="kw">return</span> <span class="type">ResponseEntity</span>.status(<span class="type">HttpStatus</span>.CREATED).body(saved);
+
+        } <span class="kw">catch</span> (<span class="type">FieldNotFoundException</span> ex) {
+            <span class="cm">// 3. Nhận 404: Không tạo lịch, trả về lỗi báo sân không tồn tại</span>
+            <span class="kw">return</span> <span class="type">ResponseEntity</span>.status(<span class="type">HttpStatus</span>.NOT_FOUND)
+                .body(<span class="type">Map</span>.of(<span class="str">"error"</span>, ex.getMessage()));
+        }
+    }
+}</pre>
+      </div>
+
+      <!-- Cột phải: DTO Request & Flow Analysis -->
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="card">
+          <div class="card-title">REQUEST BODY TỪ CLIENT</div>
+          <pre><span class="kw">public record</span> <span class="type">BookingRequest</span>(
+    <span class="type">String</span> customerId,
+    <span class="type">String</span> fieldId,
+    <span class="type">LocalDate</span> bookingDate,
+    <span class="type">LocalTime</span> startTime,
+    <span class="type">LocalTime</span> endTime
+) {}</pre>
+        </div>
+
+        <div class="card card-highlight">
+          <div class="card-title">TẠI SAO DÙNG RESTCLIENT TRONG SPRING BOOT 3?</div>
+          <ul class="feature-list" style="margin-bottom: 0;">
+            <li><strong>Hiện đại & Đồng bộ (Fluent API):</strong> Thay thế <code>RestTemplate</code> (đang ở trạng thái bảo trì), cú pháp tương tự WebClient nhưng chạy đồng bộ trực quan.</li>
+            <li><strong>Xử lý Lỗi Tinh gọn (onStatus):</strong> Bắt mã lỗi 4xx/5xx ngay trong chuỗi method chaining mà không cần viết các khối try-catch rườm rà.</li>
+            <li><strong>Tự động ánh xạ JSON:</strong> Sử dụng HttpMessageConverters để parse JSON trả về trực tiếp thành Java Record <code>FieldDto</code> an toàn kiểu (Type-safe).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 2: Triển khai Spring Boot</div>
+  </div>
+</div>
+
+<!-- SLIDE 8: BÀI 2 - KỊCH BẢN KIỂM THỬ THỰC NGHIỆM -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 2: TRIỂN KHAI VỚI SPRING BOOT</span>
+        <span class="badge-time">35 PHÚT</span>
+      </div>
+      <div class="slide-title">2.3 Kịch Bản Kiểm Thử & Đánh Giá Kết Quả Thực Nghiệm</div>
+      <div class="slide-subtitle">Kiểm chứng 2 kịch bản nghiệp vụ: Đặt sân hợp lệ (200 OK) và Đặt sân không tồn tại (404 Error)</div>
+    </div>
+    <div class="slide-num">SLIDE 08 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Test Case 1: Success -->
+      <div class="card card-emerald">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <strong style="color: #34d399; font-size: 13px;">TEST CASE 1: ĐẶT SÂN THÀNH CÔNG (200 OK)</strong>
+          <span class="pill pill-green">PASS</span>
+        </div>
+        <div class="card-p" style="font-size: 11px;"><strong>Request Client gửi lên:</strong></div>
+        <pre><span class="str">POST</span> http://localhost:8080/api/bookings
+{
+  <span class="str">"customerId"</span>: <span class="str">"cust-889"</span>,
+  <span class="str">"fieldId"</span>: <span class="str">"f-101"</span>,
+  <span class="str">"bookingDate"</span>: <span class="str">"2026-10-10"</span>,
+  <span class="str">"startTime"</span>: <span class="str">"18:00:00"</span>,
+  <span class="str">"endTime"</span>: <span class="str">"20:00:00"</span>
+}</pre>
+        <div class="card-p" style="font-size: 11px; margin-top: 6px;"><strong>Kết quả phản hồi (201 Created):</strong></div>
+        <pre>{
+  <span class="str">"bookingId"</span>: <span class="str">"BK-202610-A91F"</span>,
+  <span class="str">"fieldId"</span>: <span class="str">"f-101"</span>,
+  <span class="str">"fieldName"</span>: <span class="str">"Sân bóng cỏ nhân tạo 7 người - Sân A"</span>,
+  <span class="str">"totalAmount"</span>: <span class="num">700000.0</span>,
+  <span class="str">"status"</span>: <span class="str">"CONFIRMED"</span>
+}</pre>
+        <div style="font-size: 11px; color: #a7f3d0; margin-top: 6px;">
+          ✓ Booking Service xác thực sân thành công &amp; lưu bản ghi vào Database.
+        </div>
+      </div>
+
+      <!-- Test Case 2: Not Found -->
+      <div class="card card-rose">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <strong style="color: #fb7185; font-size: 13px;">TEST CASE 2: SÂN KHÔNG TỒN TẠI (404 NOT FOUND)</strong>
+          <span class="pill pill-red">ERROR CAUGHT</span>
+        </div>
+        <div class="card-p" style="font-size: 11px;"><strong>Request Client gửi lên với ID không có:</strong></div>
+        <pre><span class="str">POST</span> http://localhost:8080/api/bookings
+{
+  <span class="str">"customerId"</span>: <span class="str">"cust-889"</span>,
+  <span class="str">"fieldId"</span>: <span class="str">"f-999"</span>,  <span class="cm">// ID giả lập không tồn tại</span>
+  <span class="str">"bookingDate"</span>: <span class="str">"2026-10-10"</span>,
+  <span class="str">"startTime"</span>: <span class="str">"18:00:00"</span>,
+  <span class="str">"endTime"</span>: <span class="str">"20:00:00"</span>
+}</pre>
+        <div class="card-p" style="font-size: 11px; margin-top: 6px;"><strong>Kết quả phản hồi (404 Not Found):</strong></div>
+        <pre>{
+  <span class="str">"timestamp"</span>: <span class="str">"2026-10-05T14:02:15Z"</span>,
+  <span class="str">"status"</span>: <span class="num">404</span>,
+  <span class="str">"error"</span>: <span class="str">"Sân 'f-999' không tồn tại!"</span>
+}</pre>
+        <div style="font-size: 11px; color: #fecdd3; margin-top: 6px;">
+          ✓ Hoàn toàn KHÔNG tạo lịch rác trong DB, bảo toàn tính toàn vẹn dữ liệu.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 2: Triển khai Spring Boot</div>
+  </div>
+</div>
+
+<!-- SLIDE 9: BÀI 3 - FASTAPI (PYTHON) CONSUMER -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 3: TIÊU THỤ BẰNG FASTAPI</span>
+        <span class="badge-time">35 PHÚT</span>
+      </div>
+      <div class="slide-title">3.1 Viết Lại Consumer Bằng FastAPI (Python 3.12 + HTTPX)</div>
+      <div class="slide-subtitle">Triển khai Asynchronous Consumer đồng nhất với module python_backend tại D:\hdvackend</div>
+    </div>
+    <div class="slide-num">SLIDE 09 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-55-45">
+      <!-- Cột trái: Code FastAPI Python -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">booking_service.py</strong> (FastAPI + Pydantic + HTTPX)</div>
+        <pre><span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI, HTTPException, status
+<span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+<span class="kw">import</span> httpx, os
+
+app = FastAPI(title=<span class="str">"Booking Service (FastAPI)"</span>)
+FIELD_SERVICE_URL = os.getenv(<span class="str">"FIELD_SERVICE_URL"</span>, <span class="str">"http://localhost:8081"</span>)
+
+<span class="kw">class</span> <span class="type">BookingRequest</span>(BaseModel):
+    customerId: str
+    fieldId: str
+    bookingDate: str
+    startTime: str
+    endTime: str
+
+<span class="anno">@app.post</span>(<span class="str">"/api/bookings"</span>, status_code=status.HTTP_201_CREATED)
+<span class="kw">async def</span> <span class="fn">create_booking</span>(req: <span class="type">BookingRequest</span>):
+    <span class="cm"># 1. Gọi sang field-service bằng httpx.AsyncClient (Timeout 3s)</span>
+    <span class="kw">async with</span> httpx.AsyncClient(timeout=<span class="num">3.0</span>) <span class="kw">as</span> client:
+        <span class="kw">try</span>:
+            resp = <span class="kw">await</span> client.get(f<span class="str">"{FIELD_SERVICE_URL}/api/fields/{req.fieldId}"</span>)
+        <span class="kw">except</span> httpx.ConnectError:
+            <span class="kw">raise</span> HTTPException(status_code=<span class="num">503</span>, detail=<span class="str">"Field Service không phản hồi"</span>)
+
+    <span class="cm"># 2. Xử lý 404: Không tạo lịch, trả về lỗi sân không tồn tại</span>
+    <span class="kw">if</span> resp.status_code == <span class="num">404</span>:
+        <span class="kw">raise</span> HTTPException(status_code=<span class="num">404</span>, detail=f<span class="str">"Sân '{req.fieldId}' không tồn tại!"</span>)
+
+    field = resp.json()
+    <span class="cm"># 3. Nhận 200 OK: Tiếp tục lưu đơn đặt sân và trả về thành công</span>
+    <span class="kw">return</span> {
+        <span class="str">"bookingId"</span>: f<span class="str">"BK-PY-{os.urandom(4).hex().upper()}"</span>,
+        <span class="str">"customerId"</span>: req.customerId, <span class="str">"fieldId"</span>: req.fieldId,
+        <span class="str">"fieldName"</span>: field.get(<span class="str">"name"</span>), <span class="str">"status"</span>: <span class="str">"CONFIRMED"</span>
+    }</pre>
+      </div>
+
+      <!-- Cột phải: Đánh giá đặc trưng FastAPI -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="card card-highlight">
+          <div class="card-title">ƯU THẾ TUYỆT VỜI CỦA FASTAPI CONSUMER</div>
+          <ul class="feature-list">
+            <li><strong>Thực Tế Từ Dự Án:</strong> Trong <code>D:\hdvackend\python_backend</code> đã có sẵn FastAPI, Uvicorn, và HTTPX, giúp triển khai tức thì không cần cài thêm công cụ mới.</li>
+            <li><strong>AsyncIO &amp; HTTPX Non-blocking:</strong> Xử lý đồng thời hàng ngàn request I/O-bound với tài nguyên CPU và RAM tối thiểu.</li>
+            <li><strong>Data Validation với Pydantic:</strong> Dữ liệu được ép kiểu và kiểm tra tính hợp lệ tự động; tự sinh tài liệu tương tác <strong>Swagger UI (/docs)</strong>.</li>
+          </ul>
+        </div>
+
+        <div class="card card-emerald">
+          <div class="card-title" style="color: #34d399;">CƠ CHẾ ASYNC CONTEXT MANAGER</div>
+          <p class="card-p" style="font-size: 11px; margin-bottom: 0;">
+            Việc dùng <code>async with httpx.AsyncClient()</code> đảm bảo kết nối TCP/HTTP pool được quản lý tự động, tự giải phóng socket ngay khi hoàn tất request hoặc khi gặp lỗi timeout.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 3: Tiêu thụ API với FastAPI</div>
+  </div>
+</div>
+
+<!-- SLIDE 10: BÀI 3 - BẢNG SO SÁNH SPRING BOOT VS FASTAPI -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 3: TIÊU THỤ BẰNG FASTAPI</span>
+        <span class="badge-time">35 PHÚT</span>
+      </div>
+      <div class="slide-title">3.2 Bảng So Sánh Toàn Diện: Spring Boot vs FastAPI</div>
+      <div class="slide-subtitle">Đánh giá 5 tiêu chí kỹ thuật: Ngôn ngữ, HTTP Client, JSON, Khởi động, Mức độ phức tạp</div>
+    </div>
+    <div class="slide-num">SLIDE 10 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 17%;">Tiêu Chí Đánh Giá</th>
+          <th style="width: 41%;">Spring Boot 3 (Java 21)</th>
+          <th style="width: 42%;">FastAPI (Python 3.12)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Ngôn Ngữ & Mô Hình Luồng</strong></td>
+          <td>Java: Kiểu dữ liệu tĩnh (Static Typing). Mô hình đa luồng JVM (Multi-threading), hỗ trợ <em>Virtual Threads (Project Loom)</em> xử lý tải lớn.</td>
+          <td>Python: Kiểu động kết hợp Type Hints. Mô hình đơn luồng dựa trên cơ chế <em>AsyncIO Event Loop (uvloop)</em> xử lý non-blocking I/O siêu mượt.</td>
+        </tr>
+        <tr>
+          <td><strong>2. Cú Pháp HTTP Client</strong></td>
+          <td>Sử dụng <code>RestClient</code> hoặc <code>WebClient</code>. Cú pháp Fluent API hướng đối tượng, kiểm tra kiểu chặt chẽ (Type-safe), xử lý lỗi qua <code>onStatus()</code>.</td>
+          <td>Sử dụng thư viện <code>httpx.AsyncClient</code> hoặc <code>aiohttp</code>. Cú pháp <code>async / await</code> kết hợp <code>async with</code> cực kỳ tinh gọn, dễ đọc.</td>
+        </tr>
+        <tr>
+          <td><strong>3. Cấu Hình & Xử Lý JSON</strong></td>
+          <td>Phụ thuộc vào <code>Jackson ObjectMapper</code>. Cần định nghĩa cấu trúc qua Java Record hoặc POJO Class; ánh xạ qua cơ chế Reflection.</td>
+          <td>Tự động hóa hoàn toàn nhờ <code>Pydantic BaseModel</code>. Tự động kiểm tra dữ liệu đầu vào (Validation) và serialize JSON mà không cần code boilerplate.</td>
+        </tr>
+        <tr>
+          <td><strong>4. Thời Gian Khởi Động (Startup Time)</strong></td>
+          <td>Trung bình <strong>1.5 – 4.5 giây</strong> (Do quá trình khởi tạo JVM, quét Component Scan, cấu hình IoC Container).</td>
+          <td>Khởi động tức thì: <strong>0.2 – 0.5 giây</strong>. Rất lý tưởng cho môi trường Container (Docker), Kubernetes Auto-scaling và Serverless.</td>
+        </tr>
+        <tr>
+          <td><strong>5. Mức Độ Phức Tạp & Tiêu Tốn RAM</strong></td>
+          <td>Mức độ phức tạp: <strong>Trung bình – Cao</strong>. Yêu cầu tuân thủ cấu trúc IoC, DI, Maven. Tiêu thụ RAM trung bình từ <strong>150MB – 350MB</strong>.</td>
+          <td>Mức độ phức tạp: <strong>Thấp – Trung bình</strong>. Cú pháp ngắn gọn, dễ tiếp cận, tích hợp sẵn Swagger UI. Tiêu thụ RAM thấp: <strong>40MB – 80MB</strong>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card card-highlight" style="margin-top: 6px; padding: 10px 14px;">
+      <div class="card-title">KẾT LUẬN LỰA CHỌN KIẾN TRÚC</div>
+      <p class="card-p" style="font-size: 11px; margin-bottom: 0;">
+        • Chọn <strong>Spring Boot</strong> cho các dịch vụ nghiệp vụ cốt lõi, giao dịch thanh toán (Payment Service) đòi hỏi tính nhất quán ACID và kiểm soát bảo mật đa tầng.
+        <br>• Chọn <strong>FastAPI (Python)</strong> cho các dịch vụ Consumer, API Gateway, xử lý dữ liệu truyền thông đa phương tiện (Media Service) và các tác vụ AI/ML phân tích dữ liệu sân thể thao.
+      </p>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 3: Tiêu thụ API với FastAPI</div>
+  </div>
+</div>
+
+<!-- SLIDE 11: BÀI 4 - XỬ LÝ LỖI MẠNG (SERVICE UNAVAILABLE) -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 4: LỖI, TIMEOUT & BẤT ĐỒNG BỘ</span>
+        <span class="badge-time">40 PHÚT</span>
+      </div>
+      <div class="slide-title">4.1 Xử Lý Lỗi Mạng: Bắt Lỗi Connection Refused</div>
+      <div class="slide-subtitle">Bảo đảm tính bền vững (Resilience) khi Provider đột ngột ngừng hoạt động, không để sập ứng dụng</div>
+    </div>
+    <div class="slide-num">SLIDE 11 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: Tình huống lỗi & Hậu quả -->
+      <div class="card card-rose">
+        <div class="card-title" style="color: #fb7185;">TÌNH HUỐNG LỖI MẠNG (DOWNSTREAM OUTAGE)</div>
+        <p class="card-p"><strong>Kịch bản thực nghiệm:</strong> Tắt hoàn toàn <code>field-service</code> (port 8081). Sau đó gửi request đặt sân đến <code>booking-service</code> (port 8080).</p>
+        <div style="background: #060a12; border: 1px solid #3f121d; border-radius: 6px; padding: 8px; font-family: monospace; font-size: 10px; color: #fca5a5; margin-bottom: 8px;">
+          org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8081/api/fields/f-101": ConnectException: Connection refused: connect
+        </div>
+        <ul class="feature-list">
+          <li><strong>Nếu KHÔNG xử lý ngoại lệ:</strong> Lỗi kết nối sẽ văng thẳng ra ngoài luồng, ứng dụng trả về mã lỗi <code>500 Internal Server Error</code> kèm toàn bộ StackTrace nhạy cảm, gây hoang mang cho người dùng và vi phạm an toàn thông tin.</li>
+          <li><strong>Mục tiêu thiết kế:</strong> Bắt gọn ngoại lệ mạng, ghi log cảnh báo và trả về phản hồi lịch sự <code>503 Service Unavailable</code>.</li>
+        </ul>
+      </div>
+
+      <!-- Cột phải: Giải pháp mã nguồn -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">GlobalExceptionHandler.java</strong> (Xử lý tập trung)</div>
+        <pre><span class="anno">@RestControllerAdvice</span>
+<span class="kw">public class</span> <span class="type">GlobalExceptionHandler</span> {
+
+    <span class="anno">@ExceptionHandler</span>(<span class="type">ResourceAccessException</span>.<span class="kw">class</span>)
+    <span class="kw">public</span> <span class="type">ResponseEntity</span>&lt;?&gt; <span class="fn">handleNetworkDown</span>(<span class="type">ResourceAccessException</span> ex) {
+        <span class="cm">// Bắt lỗi kết nối mạng (Connection refused)</span>
+        <span class="kw">return</span> <span class="type">ResponseEntity</span>.status(<span class="type">HttpStatus</span>.SERVICE_UNAVAILABLE)
+            .body(<span class="type">Map</span>.of(
+                <span class="str">"timestamp"</span>, <span class="type">Instant</span>.now().toString(),
+                <span class="str">"status"</span>, <span class="num">503</span>,
+                <span class="str">"error"</span>, <span class="str">"Service Unavailable"</span>,
+                <span class="str">"message"</span>, <span class="str">"Hệ thống quản lý sân bãi đang bảo trì. Vui lòng thử lại sau!"</span>
+            ));
+    }
+}</pre>
+        <div class="card card-emerald" style="margin-top: 8px; padding: 8px 12px;">
+          <div style="font-size: 11px; color: #34d399; font-weight: 700;">KẾT QUẢ ĐẠT ĐƯỢC:</div>
+          <div style="font-size: 11px; color: #cbd5e1;">
+            ✓ Ứng dụng booking-service <strong>vẫn chạy ổn định 100%</strong>, không crash.
+            <br>✓ Client nhận được mã 503 cùng chỉ dẫn rõ ràng thay vì màn hình trắng.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 4: Lỗi & Timeout</div>
+  </div>
+</div>
+
+<!-- SLIDE 12: BÀI 4 - CẤU HÌNH TIMEOUT & 504 GATEWAY TIMEOUT -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 4: LỖI, TIMEOUT & BẤT ĐỒNG BỘ</span>
+        <span class="badge-time">40 PHÚT</span>
+      </div>
+      <div class="slide-title">4.2 Cấu Hình Timeout (3s) & Xử Lý 504 Gateway Timeout</div>
+      <div class="slide-subtitle">Giả lập Provider phản hồi trễ (5-10s) và ngắt kết nối tự động để tránh cạn kiệt tài nguyên</div>
+    </div>
+    <div class="slide-num">SLIDE 12 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: Cấu hình Timeout -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">Cấu hình RestClient Timeout 3 Giây</strong> (Spring Boot)</div>
+        <pre><span class="anno">@Configuration</span>
+<span class="kw">public class</span> <span class="type">RestClientConfig</span> {
+    <span class="anno">@Bean</span>
+    <span class="kw">public</span> <span class="type">RestClient</span> <span class="fn">fieldRestClient</span>() {
+        <span class="cm">// Cấu hình thời gian chờ kết nối và chờ đọc dữ liệu</span>
+        <span class="type">ClientHttpRequestFactorySettings</span> settings = 
+            <span class="type">ClientHttpRequestFactorySettings</span>.DEFAULTS
+                .withConnectTimeout(<span class="type">Duration</span>.ofSeconds(<span class="num">2</span>))
+                .withReadTimeout(<span class="type">Duration</span>.ofSeconds(<span class="num">3</span>)); <span class="cm">// Timeout 3s</span>
+
+        <span class="kw">return</span> <span class="type">RestClient</span>.builder()
+            .requestFactory(<span class="type">ClientHttpRequestFactories</span>.get(settings))
+            .baseUrl(<span class="str">"http://localhost:8081"</span>)
+            .build();
+    }
+}</pre>
+        <div class="card-p" style="font-size: 11px; margin-top: 6px; margin-bottom: 4px;"><strong style="color: #fbbf24;">Giả lập trễ tại Field Service:</strong></div>
+        <pre><span class="anno">@GetMapping</span>(<span class="str">"/{id}"</span>)
+<span class="kw">public</span> <span class="type">ResponseEntity</span>&lt;?&gt; <span class="fn">getField</span>(...) <span class="kw">throws</span> <span class="type">InterruptedException</span> {
+    <span class="type">Thread</span>.sleep(<span class="num">8000</span>); <span class="cm">// Giả lập nghẽn mạng hoặc database trễ 8 giây</span>
+    <span class="kw">return</span> <span class="type">ResponseEntity</span>.ok(field);
+}</pre>
+      </div>
+
+      <!-- Cột phải: Xử lý ngoại lệ 504 -->
+      <div style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="card">
+          <div class="card-title">XỬ LÝ NGOẠI LỆ 504 GATEWAY TIMEOUT</div>
+          <pre><span class="anno">@ExceptionHandler</span>(<span class="type">SocketTimeoutException</span>.<span class="kw">class</span>)
+<span class="kw">public</span> <span class="type">ResponseEntity</span>&lt;?&gt; <span class="fn">handleTimeout</span>() {
+    <span class="kw">return</span> <span class="type">ResponseEntity</span>.status(<span class="type">HttpStatus</span>.GATEWAY_TIMEOUT)
+        .body(<span class="type">Map</span>.of(
+            <span class="str">"status"</span>, <span class="num">504</span>,
+            <span class="str">"error"</span>, <span class="str">"Gateway Timeout"</span>,
+            <span class="str">"message"</span>, <span class="str">"Field Service phản hồi vượt quá 3s. Hủy giao dịch!"</span>
+        ));
+}</pre>
+        </div>
+
+        <div class="card card-amber">
+          <div class="card-title" style="color: #fbbf24;">Ý NGHĨA QUAN TRỌNG CỦA TIMEOUT TRONG MICROSERVICES</div>
+          <ul class="feature-list" style="margin-bottom: 0;">
+            <li><strong>Chống Thắt Cổ Chai (Avoid Thread Starvation):</strong> Nếu không có timeout, mỗi request của khách sẽ chiếm giữ 1 worker thread trong 30-60 giây. Chỉ cần 200 khách gọi là toàn bộ server Tomcat cạn kiệt luồng và sập hoàn toàn.</li>
+            <li><strong>Nguyên tắc Fail-Fast:</strong> Phát hiện lỗi sớm và ngắt ngay lập tức giúp hệ thống nhanh chóng giải phóng RAM/CPU để phục vụ các yêu cầu khác.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 4: Lỗi & Timeout</div>
+  </div>
+</div>
+
+<!-- SLIDE 13: BÀI 4 - GIAO TIẾP BẤT ĐỒNG BỘ QUA RABBITMQ -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 4: LỖI, TIMEOUT & BẤT ĐỒNG BỘ</span>
+        <span class="badge-time">40 PHÚT</span>
+      </div>
+      <div class="slide-title">4.3 Giao Tiếp Bất Đồng Bộ Với Hàng Đợi RabbitMQ</div>
+      <div class="slide-subtitle">Thiết kế mô hình Event-Driven giải phóng kết nối cho tác vụ thông báo đặt sân mới</div>
+    </div>
+    <div class="slide-num">SLIDE 13 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-40-60">
+      <!-- Cột trái: Phân tích nghiệp vụ -->
+      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div class="card-title">VẤN ĐỀ CỦA GỌI ĐỒNG BỘ KHI GỬI THÔNG BÁO</div>
+          <p class="card-p">
+            Sau khi lưu đơn đặt sân thành công, nếu Booking Service gọi HTTP trực tiếp đến Notification Service:
+          </p>
+          <ul class="feature-list">
+            <li>Gửi SMS/Email/Push thường mất từ <strong>1 đến 3 giây</strong> do phụ thuộc vào bên thứ 3 (Twilio, Firebase, SendGrid).</li>
+            <li>Nếu hệ thống thông báo quá tải hoặc bị lỗi, đơn đặt sân của khách hàng cũng sẽ bị báo lỗi theo!</li>
+          </ul>
+        </div>
+
+        <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 8px 10px;">
+          <strong style="color: #fbbf24; font-size: 11px;">GIẢI PHÁP EVENT-DRIVEN (RABBITMQ):</strong>
+          <p style="font-size: 11px; color: #e2e8f0; margin-top: 3px; margin-bottom: 0;">
+            Booking Service chỉ việc <strong>bắn sự kiện BookingCreated</strong> vào hàng đợi RabbitMQ rồi trả ngay kết quả cho khách (thời gian dưới 10ms). Notification Service sẽ tự động lấy tin nhắn xử lý ngầm (Background Worker).
+          </p>
+        </div>
+      </div>
+
+      <!-- Cột phải: Sơ đồ kiến trúc RabbitMQ -->
+      <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="card-title">SƠ ĐỒ LUỒNG TIN NHẮN (TOPOLOGY RABBITMQ)</div>
+        <div style="text-align: center; margin: auto; width: 100%;">
+          <svg viewBox="0 0 420 180" style="width: 100%; height: auto; max-height: 175px;">
+            <!-- Producer -->
+            <rect x="10" y="55" width="105" height="50" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1.5"/>
+            <text x="62" y="77" fill="#ffffff" font-size="10.5" font-weight="700" text-anchor="middle">Booking Service</text>
+            <text x="62" y="93" fill="#93c5fd" font-size="9" text-anchor="middle">[PRODUCER]</text>
+
+            <!-- Arrow to Exchange -->
+            <line x1="115" y1="80" x2="165" y2="80" stroke="#f59e0b" stroke-width="2"/>
+            <polyline points="160,76 168,80 160,84" fill="#f59e0b"/>
+            <text x="140" y="73" fill="#fbbf24" font-size="8" text-anchor="middle">publish</text>
+
+            <!-- Exchange -->
+            <polygon points="205,45 245,80 205,115 165,80" fill="#78350f" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="205" y="78" fill="#fef3c7" font-size="9" font-weight="800" text-anchor="middle">Exchange</text>
+            <text x="205" y="89" fill="#fde68a" font-size="7.5" text-anchor="middle">topic</text>
+
+            <!-- Arrow Routing Key -->
+            <line x1="245" y1="80" x2="285" y2="80" stroke="#f59e0b" stroke-width="2"/>
+            <polyline points="280,76 288,80 280,84" fill="#f59e0b"/>
+            <text x="265" y="73" fill="#fbbf24" font-size="7.5" text-anchor="middle">routingKey</text>
+
+            <!-- Queue -->
+            <rect x="288" y="55" width="40" height="50" rx="3" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+            <line x1="298" y1="55" x2="298" y2="105" stroke="#38bdf8" stroke-dasharray="2,2"/>
+            <line x1="308" y1="55" x2="308" y2="105" stroke="#38bdf8" stroke-dasharray="2,2"/>
+            <line x1="318" y1="55" x2="318" y2="105" stroke="#38bdf8" stroke-dasharray="2,2"/>
+            <text x="308" y="120" fill="#93c5fd" font-size="8" font-weight="700" text-anchor="middle">Queue</text>
+
+            <!-- Arrow to Consumer -->
+            <line x1="328" y1="80" x2="355" y2="80" stroke="#a855f7" stroke-width="2"/>
+            <polyline points="350,76 358,80 350,84" fill="#a855f7"/>
+            <text x="342" y="73" fill="#c084fc" font-size="7.5" text-anchor="middle">consume</text>
+
+            <!-- Consumer -->
+            <rect x="358" y="55" width="55" height="50" rx="6" fill="#581c87" stroke="#c084fc" stroke-width="1.5"/>
+            <text x="385" y="77" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">Notification</text>
+            <text x="385" y="89" fill="#e9d5ff" font-size="8" text-anchor="middle">Service</text>
+            <text x="385" y="99" fill="#c084fc" font-size="7.5" text-anchor="middle">[CONSUMER]</text>
+          </svg>
+        </div>
+        <div style="font-size: 10.5px; color: #94a3b8; border-top: 1px solid #1e293b; padding-top: 6px;">
+          Exchange: <code>booking.exchange</code> | Queue: <code>notification.booking.queue</code> | RoutingKey: <code>booking.created</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 4: Bất đồng bộ RabbitMQ</div>
+  </div>
+</div>
+
+<!-- SLIDE 14: BÀI 4 - CODE PRODUCER & CONSUMER RABBITMQ -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 4: LỖI, TIMEOUT & BẤT ĐỒNG BỘ</span>
+        <span class="badge-time">40 PHÚT</span>
+      </div>
+      <div class="slide-title">4.4 Triển Khai RabbitMQ: Producer & Consumer Chi Tiết</div>
+      <div class="slide-subtitle">Gói tin BookingCreatedEvent và xử lý in console log tại Notification Service</div>
+    </div>
+    <div class="slide-num">SLIDE 14 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: Producer Code (Booking Service) -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">BookingProducer.java</strong> (booking-service)</div>
+        <pre><span class="anno">@Service</span>
+<span class="kw">public class</span> <span class="type">BookingProducer</span> {
+    <span class="kw">private final</span> <span class="type">RabbitTemplate</span> rabbitTemplate;
+
+    <span class="kw">public</span> <span class="fn">BookingProducer</span>(<span class="type">RabbitTemplate</span> rabbitTemplate) {
+        <span class="kw">this</span>.rabbitTemplate = rabbitTemplate;
+    }
+
+    <span class="kw">public void</span> <span class="fn">publishBookingCreated</span>(<span class="type">Booking</span> booking) {
+        <span class="type">BookingCreatedEvent</span> event = <span class="kw">new</span> <span class="type">BookingCreatedEvent</span>(
+            booking.getBookingId(),
+            booking.getFieldId(),
+            booking.getCustomerId(),
+            <span class="type">Instant</span>.now()
+        );
+        <span class="cm">// Đẩy sự kiện vào RabbitMQ</span>
+        rabbitTemplate.convertAndSend(
+            <span class="str">"booking.exchange"</span>,
+            <span class="str">"booking.created"</span>,
+            event
+        );
+        <span class="type">System</span>.out.println(<span class="str">"[PRODUCER] Đã bắn sự kiện đặt sân: "</span> + booking.getBookingId());
+    }
+}</pre>
+      </div>
+
+      <!-- Cột phải: Consumer Code (Notification Service) -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #c084fc;">NotificationConsumer.java</strong> (notification-service)</div>
+        <pre><span class="anno">@Component</span>
+<span class="kw">public class</span> <span class="type">NotificationConsumer</span> {
+
+    <span class="anno">@RabbitListener</span>(queues = <span class="str">"notification.booking.queue"</span>)
+    <span class="kw">public void</span> <span class="fn">handleBookingCreated</span>(<span class="type">BookingCreatedEvent</span> event) {
+        <span class="type">System</span>.out.println(<span class="str">"=================================================="</span>);
+        <span class="type">System</span>.out.println(<span class="str">"📢 [NOTIFICATION SERVICE] NHẬN ĐƯỢC ĐƠN ĐẶT SÂN MỚI!"</span>);
+        <span class="type">System</span>.out.println(<span class="str">" ➔ Booking ID : "</span> + event.bookingId());
+        <span class="type">System</span>.out.println(<span class="str">" ➔ Field ID   : "</span> + event.fieldId());
+        <span class="type">System</span>.out.println(<span class="str">" ➔ Customer ID: "</span> + event.customerId());
+        <span class="type">System</span>.out.println(<span class="str">" ➔ Thời gian  : "</span> + event.timestamp());
+        <span class="type">System</span>.out.println(<span class="str">" Đang gửi Email & Push Notification tới khách hàng..."</span>);
+        <span class="type">System</span>.out.println(<span class="str">"=================================================="</span>);
+    }
+}</pre>
+        <div class="card card-emerald" style="margin-top: 8px; padding: 7px 12px;">
+          <div style="font-size: 11px; color: #34d399; font-weight: 700;">TÍNH BẢO ĐẢM TIN NHẮN (MESSAGE DURABILITY):</div>
+          <p class="card-p" style="font-size: 10.5px; margin-bottom: 0;">
+            Khi Notification Service tắt bảo trì, tin nhắn vẫn được lưu an toàn trong Queue của RabbitMQ. Ngay khi bật lại, service sẽ tự động đọc và gửi bù toàn bộ thông báo mà không làm mất bất kỳ đơn nào!
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 4: Bất đồng bộ RabbitMQ</div>
+  </div>
+</div>
+
+<!-- SLIDE 15: BÀI 5 - TRÁNH HARD-CODE (DYNAMIC CONFIGURATION) -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 5: MỞ RỘNG & ĐÁNH GIÁ</span>
+        <span class="badge-time">20 PHÚT</span>
+      </div>
+      <div class="slide-title">5.1 Thử Thách 1: Tránh Hard-Code Bằng Cấu Hình Động</div>
+      <div class="slide-subtitle">Externalized Configuration chuẩn 12-Factor App trong application.yml và Docker</div>
+    </div>
+    <div class="slide-num">SLIDE 15 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: File cấu hình YAML -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #fbbf24;">application.yml</strong> (Externalized Configuration)</div>
+        <pre><span class="str">server:</span>
+  <span class="str">port:</span> <span class="num">8080</span>
+
+<span class="str">services:</span>
+  <span class="str">field-service:</span>
+    <span class="cm"># Nạp động từ biến môi trường FIELD_SERVICE_URL</span>
+    <span class="cm"># Mặc định localhost:8081 nếu không khai báo</span>
+    <span class="str">url:</span> <span class="str">${FIELD_SERVICE_URL:http://localhost:8081}</span>
+    <span class="str">connect-timeout-ms:</span> <span class="num">2000</span>
+    <span class="str">read-timeout-ms:</span> <span class="num">3000</span>
+
+<span class="str">spring:</span>
+  <span class="str">rabbitmq:</span>
+    <span class="str">host:</span> <span class="str">${RABBITMQ_HOST:localhost}</span>
+    <span class="str">port:</span> <span class="str">5672</span></pre>
+      </div>
+
+      <!-- Cột phải: Inject bằng ConfigurationProperties -->
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div>
+          <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">FieldServiceProperties.java</strong> (Type-safe Config)</div>
+          <pre><span class="anno">@ConfigurationProperties</span>(prefix = <span class="str">"services.field-service"</span>)
+<span class="kw">public record</span> <span class="type">FieldServiceProperties</span>(
+    <span class="type">String</span> url,
+    <span class="type">int</span> connectTimeoutMs,
+    <span class="type">int</span> readTimeoutMs
+) {}</pre>
+        </div>
+
+        <div class="card card-highlight">
+          <div class="card-title">ƯU THẾ TUYỆT ĐỐI KHI TRIỂN KHAI PRODUCTION</div>
+          <ul class="feature-list" style="margin-bottom: 0;">
+            <li><strong>Không cần Rebuild mã nguồn:</strong> Khi chuyển từ máy cá nhân lên Docker Swarm hay Kubernetes Cluster, chỉ cần truyền biến môi trường:
+              <br><code style="color: #fde68a;">docker run -e FIELD_SERVICE_URL=http://prod-field:8081 ...</code>
+            </li>
+            <li><strong>Bảo mật & Tách biệt:</strong> Không để lộ các địa chỉ mạng nội bộ, thông tin đăng nhập trong repository Git mã nguồn.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 5: Thử thách mở rộng</div>
+  </div>
+</div>
+
+<!-- SLIDE 16: BÀI 5 - RETRY & FALLBACK PATTERN -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 5: MỞ RỘNG & ĐÁNH GIÁ</span>
+        <span class="badge-time">20 PHÚT</span>
+      </div>
+      <div class="slide-title">5.2 Thử Thách 2: Cơ Chế Tự Động Thử Lại (Retry) & Fallback</div>
+      <div class="slide-subtitle">Triển khai Resilience Pattern tự phục hồi trước lỗi mạng chập chờn (Transient Faults)</div>
+    </div>
+    <div class="slide-num">SLIDE 16 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-2col">
+      <!-- Cột trái: Code Spring Retry -->
+      <div>
+        <div class="card-p" style="font-size: 11px; margin-bottom: 4px;"><strong style="color: #38bdf8;">FieldClientService.java</strong> (Tích hợp Spring Retry)</div>
+        <pre><span class="anno">@Service</span>
+<span class="kw">public class</span> <span class="type">FieldClientService</span> {
+    <span class="kw">private final</span> <span class="type">RestClient</span> restClient;
+
+    <span class="anno">@Retryable</span>(
+        retryFor = { <span class="type">ResourceAccessException</span>.<span class="kw">class</span> }, <span class="cm">// Lỗi mạng tạm thời</span>
+        maxAttempts = <span class="num">3</span>,                              <span class="cm">// Thử tối đa 3 lần</span>
+        backoff = <span class="anno">@Backoff</span>(delay = <span class="num">1000</span>, multiplier = <span class="num">1.5</span>) <span class="cm">// Giãn cách lũy tiến</span>
+    )
+    <span class="kw">public</span> <span class="type">FieldDto</span> <span class="fn">getFieldDetails</span>(<span class="type">String</span> fieldId) {
+        <span class="type">System</span>.out.println(<span class="str">"Đang kết nối Field Service (lần gọi)..."</span>);
+        <span class="kw">return</span> restClient.get()
+            .uri(<span class="str">"/api/fields/{id}"</span>, fieldId)
+            .retrieve()
+            .body(<span class="type">FieldDto</span>.<span class="kw">class</span>);
+    }
+
+    <span class="anno">@Recover</span>
+    <span class="kw">public</span> <span class="type">FieldDto</span> <span class="fn">fallbackField</span>(<span class="type">ResourceAccessException</span> ex, <span class="type">String</span> id) {
+        <span class="type">System</span>.err.println(<span class="str">"Đã thử 3 lần thất bại. Kích hoạt Fallback!"</span>);
+        <span class="kw">throw new</span> <span class="type">ServiceFallbackException</span>(
+            <span class="str">"Hệ thống kiểm tra sân bận. Đơn tạm thời chuyển vào hàng chờ duyệt!"</span>
+        );
+    }
+}</pre>
+      </div>
+
+      <!-- Cột phải: Diễn giải Resilience -->
+      <div style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="card card-emerald">
+          <div class="card-title" style="color: #34d399;">CƠ CHẾ HOẠT ĐỘNG CỦA RETRY & BACKOFF</div>
+          <ul class="feature-list">
+            <li><strong>Lần 1:</strong> Gặp lỗi chập chờn gói tin (Network Glitch). Service không báo lỗi ngay mà dừng <strong>1000ms</strong>.</li>
+            <li><strong>Lần 2:</strong> Tiếp tục thử lại lần 2. Nếu vẫn lỗi, tăng thời gian chờ lên <strong>1500ms</strong> (Multiplier 1.5).</li>
+            <li><strong>Lần 3:</strong> Thử lại lần cuối. Nếu Provider đã hồi phục, request hoàn thành mà người dùng không hề biết đã có lỗi xảy ra!</li>
+          </ul>
+        </div>
+
+        <div class="card card-amber">
+          <div class="card-title" style="color: #fbbf24;">KỊCH BẢN PHỤC HỒI FALLBACK</div>
+          <p class="card-p" style="font-size: 11px; margin-bottom: 0;">
+            Khi cả 3 lần thử đều thất bại, hàm <code>@Recover</code> tiếp quản để đưa ra giải pháp thay thế: chuyển giao dịch vào trạng thái <em>PENDING_APPROVAL</em>, hoặc trả về phản hồi fallback thân thiện thay vì làm sập cả hệ thống.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 5: Thử thách mở rộng</div>
+  </div>
+</div>
+
+<!-- SLIDE 17: BÀI 5 - GIẢI ĐÁP 5 EXIT TICKETS -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">BÀI 5: MỞ RỘNG & ĐÁNH GIÁ</span>
+        <span class="badge-time">20 PHÚT</span>
+      </div>
+      <div class="slide-title">5.3 Đánh Giá Cuối Bài: Giải Đáp Toàn Diện 5 Câu Hỏi Exit Ticket</div>
+      <div class="slide-subtitle">Tổng hợp các câu hỏi trọng tâm chốt kiến thức môn học kiến trúc Microservices</div>
+    </div>
+    <div class="slide-num">SLIDE 17 / 18</div>
+  </div>
+
+  <div class="slide-body" style="gap: 6px;">
+    <div class="ticket-card">
+      <div class="ticket-q">Câu 1: REST API và Spring Boot có phải là một khái niệm không?</div>
+      <div class="ticket-a">
+        <strong>KHÔNG.</strong> REST API là một <em>phong cách kiến trúc phần mềm</em> (Architectural Style) định nghĩa các nguyên tắc truyền thông qua giao thức HTTP (stateless, tài nguyên định danh qua URI). Trong khi đó, Spring Boot là một <em>Framework / Nền tảng phát triển ứng dụng Java</em>. Lập trình viên có thể dùng Spring Boot để tạo ra REST API, hoặc tạo ứng dụng console, worker, SOAP web service...
+      </div>
+    </div>
+
+    <div class="ticket-card alt">
+      <div class="ticket-q">Câu 2: Trong bài toán trên, service nào là Provider, service nào là Consumer?</div>
+      <div class="ticket-a">
+        <strong>Field Service là Provider</strong> (nhà cung cấp dữ liệu sân bãi qua API <code>GET /api/fields/{id}</code>). <strong>Booking Service là Consumer</strong> (bên tiêu thụ API của Field Service để xác thực đơn). Trong trường hợp RabbitMQ: Booking Service là Producer (bắn sự kiện), còn Notification Service là Consumer (lắng nghe sự kiện).
+      </div>
+    </div>
+
+    <div class="ticket-card">
+      <div class="ticket-q">Câu 3: Điều gì xảy ra với việc đặt sân nếu field-service ngừng hoạt động?</div>
+      <div class="ticket-a">
+        Việc tạo lịch đặt sân mới sẽ <strong>bị gián đoạn ngay lập tức</strong> vì Booking Service không thể xác thực sân. Nếu hệ thống có xử lý lỗi &amp; timeout, nó sẽ từ chối đơn một cách an toàn (trả về HTTP 503 hoặc chuyển vào hàng chờ xét duyệt) để tránh tình trạng đặt nhầm sân hư hoặc đặt chồng lấn lịch (Overbooking).
+      </div>
+    </div>
+
+    <div class="ticket-card alt">
+      <div class="ticket-q">Câu 4: Phân biệt giao tiếp đồng bộ (HTTP) và bất đồng bộ (RabbitMQ)?</div>
+      <div class="ticket-a">
+        <strong>Đồng bộ (HTTP/REST):</strong> Consumer gửi request và <em>bắt buộc phải chờ</em> Provider phản hồi mới đi tiếp (Chặt chẽ, tốn thread, phụ thuộc thời gian thực).
+        <br><strong>Bất đồng bộ (RabbitMQ):</strong> Producer đẩy thông điệp vào hàng đợi rồi <em>trả kết quả ngay lập tức</em>; Consumer tự lấy xử lý ngầm (Lỏng lẻo, không nghẽn luồng, bền vững).
+      </div>
+    </div>
+
+    <div class="ticket-card">
+      <div class="ticket-q">Câu 5: Khi nào trong bài toán đặt sân nên dùng RabbitMQ thay vì gọi REST trực tiếp?</div>
+      <div class="ticket-a">
+        Nên dùng RabbitMQ cho các tác vụ <strong>hậu kỳ (Side-effects / Background Jobs)</strong> không cần trả kết quả tức thì cho người dùng: Gửi Email/SMS xác nhận, gửi Push Notification cho chủ sân, tích điểm thưởng khách hàng thân thiết, cập nhật bảng thống kê doanh thu (Analytics), hoặc phát sự kiện realtime qua SSE/Socket (như trong <code>D:\hdvackendppsealtime</code>).
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Bài 5: Đánh giá Exit Ticket</div>
+  </div>
+</div>
+
+<!-- SLIDE 18: TỔNG KẾT & KẾT LUẬN -->
+<div class="slide">
+  <div class="slide-header">
+    <div>
+      <div class="slide-tag-group">
+        <span class="badge-module">TỔNG KẾT CHUYÊN ĐỀ</span>
+        <span class="badge-time">KẾT THÚC</span>
+      </div>
+      <div class="slide-title">Tổng Kết Kiến Trúc & Khuyến Nghị Vận Hành</div>
+      <div class="slide-subtitle">Các nguyên tắc vàng rút ra khi xây dựng hệ thống phân tán chịu lỗi cao</div>
+    </div>
+    <div class="slide-num">SLIDE 18 / 18</div>
+  </div>
+
+  <div class="slide-body">
+    <div class="grid-3col">
+      <div class="card card-emerald">
+        <div class="card-title" style="color: #34d399;">1. GIAO TIẾP HYBRID</div>
+        <p class="card-p">
+          Kết hợp hài hòa giữa <strong>REST API Đồng bộ</strong> cho các luồng dữ liệu đòi hỏi tính nhất quán tức thì (kiểm tra tồn tại sân, tính tiền) và <strong>RabbitMQ Bất đồng bộ</strong> cho các tác vụ phụ trợ (gửi thông báo, phân tích).
+        </p>
+      </div>
+
+      <div class="card card-highlight">
+        <div class="card-title">2. PHÒNG VỆ CHỦ ĐỘNG</div>
+        <p class="card-p">
+          Luôn đặt <strong>Timeout</strong> (2-3 giây) cho mọi kết nối mạng giữa các service. Bổ sung cơ chế <strong>Retry với Backoff</strong> và khối xử lý <strong>Global Exception Handler</strong> để ngăn sập dây chuyền (Cascading Outage).
+        </p>
+      </div>
+
+      <div class="card card-amber">
+        <div class="card-title" style="color: #fbbf24;">3. CẤU HÌNH & VẬN HÀNH</div>
+        <p class="card-p">
+          Tuyệt đối tránh ghi cứng URL. Sử dụng <strong>Environment Variables</strong> và file cấu hình động theo chuẩn Cloud-Native / Docker để dễ dàng scale-up và bảo trì lâu dài.
+        </p>
+      </div>
+    </div>
+
+    <div class="card" style="text-align: center; padding: 18px 24px; margin-top: 6px; background: rgba(15, 23, 42, 0.9);">
+      <h3 style="color: #f8fafc; font-size: 16px; margin-bottom: 6px;">CẢM ƠN THẦY CÔ & CÁC BẠN ĐÃ LẮNG NGHE!</h3>
+      <p style="color: #94a3b8; font-size: 12px; margin-bottom: 10px;">
+        Hệ thống mẫu đã được kiểm thử đồng bộ với kiến trúc dự án thực tế tại thư mục <code>D:\hdvackend</code>.
+      </p>
+      <div style="display: flex; justify-content: center; gap: 14px;">
+        <span class="pill pill-blue" style="font-size: 11px;">Mã Nguồn: Alobo Backend</span>
+        <span class="pill pill-green" style="font-size: 11px;">Trạng Thái: Hoàn Thành Toàn Bộ 5 Bài</span>
+        <span class="pill pill-purple" style="font-size: 11px;">Hỏi &amp; Đáp (Q&amp;A)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">
+    <div class="footer-proj"><span class="dot-status"></span> Hệ Thống Đặt Sân Thể Thao | Alobo Backend Microservices</div>
+    <div>Lời Kết &amp; Hỏi Đáp</div>
+  </div>
+</div>
+
+</body>
+</html>

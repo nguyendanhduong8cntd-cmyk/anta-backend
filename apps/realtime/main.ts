@@ -9,6 +9,8 @@ import { RedisService } from '../../packages/redis';
 import { verifyAccess, Principal } from '../../packages/auth/tokens';
 import { digest } from '../../packages/auth/crypto';
 import { requestContext } from '../../packages/observability/http';
+import { ChatService } from '../../modules/chat/service';
+import { Idempotency } from '../../packages/idempotency';
 export function parseCursor(value: unknown) {
   if (value === undefined || value === '') return '0';
   if (typeof value !== 'string' || !/^\d{1,18}$/.test(value)) throw new Error('Invalid cursor');
@@ -16,6 +18,7 @@ export function parseCursor(value: unknown) {
 }
 export async function createRealtime(port = loadConfig().realtimePort) {
   const config = loadConfig(), db = new Database(), redis = new RedisService();
+  const chat = new ChatService(db, new Idempotency(db));
   const api = express(), server = createServer(api);
   const io = new Server(server, { cors: { origin: config.corsOrigins }, maxHttpBufferSize: 4096 });
   const authenticate = async (jwt: string): Promise<Principal> => {
@@ -75,9 +78,22 @@ export async function createRealtime(port = loadConfig().realtimePort) {
         await authenticate(socket.handshake.auth.token);
         for (const event of await events(socket.data.user, socket.data.cursor)) {
           socket.emit('domain.event', event); socket.data.cursor = event.id;
+          if (event.type === 'chat.message') socket.emit('message.new', event.payload);
         }
       } catch { socket.disconnect(true); } finally { running = false; }
     }, 2000);
+    socket.on('message.send', async (data: unknown, ack: (result: unknown) => void) => {
+      if (typeof ack !== 'function') return;
+      try {
+        const payload = data as Record<string, unknown>;
+        if (!payload || typeof payload.conversationId !== 'string' || !/^[0-9a-fA-F-]{36}$/.test(payload.conversationId)
+          || typeof payload.body !== 'string' || typeof payload.key !== 'string') throw new Error('INVALID_MESSAGE');
+        await redis.rateLimit(`socket:send:${socket.data.user.userId}`, 60, 60000);
+        const user = await authenticate(socket.handshake.auth.token);
+        const message = await chat.send(user.userId, payload.conversationId, payload.body, payload.key);
+        ack({ ok: true, data: message });
+      } catch { ack({ ok: false, error: 'MESSAGE_REJECTED' }); }
+    });
     socket.on('disconnect', () => clearInterval(timer));
   });
   await new Promise<void>(resolve => server.listen(port, config.bindHost, resolve));

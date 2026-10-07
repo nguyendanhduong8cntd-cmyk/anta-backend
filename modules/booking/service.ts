@@ -5,7 +5,7 @@ import { emitEvent } from '../../packages/events';
 import { invariant } from '../../packages/contracts/errors';
 import { CatalogService } from '../catalog/service';
 import { assertTransition, BookingStatus, validateSlot } from './domain';
-import { AvailabilityQuery, BookingQuery, SlotDto } from './dto';
+import { AvailabilityQuery, BookingQuery, BookingServiceDto, RecurringBookingDto, ReviewDto, SlotDto } from './dto';
 @Injectable()
 export class BookingService {
   constructor(private readonly db: Database, private readonly catalog: CatalogService, private readonly idem: Idempotency) {}
@@ -80,6 +80,45 @@ export class BookingService {
       return row;
     });
   }
+  async createSeries(userId: string, dto: RecurringBookingDto, key: string | undefined, requestId: string) {
+    validateSlot(dto.startsAt, dto.endsAt);
+    return this.idem.run(userId, 'booking-series', key, dto, async tx => {
+      const yard = await this.catalog.yard(tx, dto.yardId, true);
+      await this.expireYard(tx, dto.yardId);
+      const series = (await tx.query(`INSERT INTO booking.series(user_id,yard_id,frequency)
+        VALUES($1,$2,'WEEKLY') RETURNING *`, [userId, dto.yardId])).rows[0];
+      const bookings = [];
+      for (let week = 0; week < dto.weeks; week++) {
+        // Move in branch-local calendar time, preserving the wall-clock hour across DST transitions.
+        const shifted = (await tx.query(`SELECT (($1::timestamptz AT TIME ZONE $3)+($4::int*interval '7 days')) AT TIME ZONE $3 AS start,
+          (($2::timestamptz AT TIME ZONE $3)+($4::int*interval '7 days')) AT TIME ZONE $3 AS finish`,
+          [dto.startsAt, dto.endsAt, yard.timezone, week])).rows[0];
+        const quote = await this.quote({ yardId: dto.yardId, startsAt: shifted.start.toISOString(), endsAt: shifted.finish.toISOString() }, tx);
+        const hold = (await tx.query(`INSERT INTO booking.holds(user_id,yard_id,starts_at,ends_at,amount,currency,expires_at)
+          VALUES($1,$2,$3,$4,$5,$6,now()+interval '5 minutes') RETURNING *`,
+          [userId, dto.yardId, quote.startsAt, quote.endsAt, quote.total, quote.currency])).rows[0];
+        await tx.query('INSERT INTO booking.reservations(yard_id,hold_id,starts_at,ends_at,expires_at) VALUES($1,$2,$3,$4,$5)',
+          [dto.yardId, hold.id, quote.startsAt, quote.endsAt, hold.expires_at]);
+        const booking = (await tx.query(`INSERT INTO booking.bookings(user_id,branch_id,yard_id,hold_id,starts_at,ends_at,amount,currency,payment_expires_at,series_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          [userId, yard.branch_id, dto.yardId, hold.id, quote.startsAt, quote.endsAt, quote.total, quote.currency, hold.expires_at, series.id])).rows[0];
+        await tx.query("UPDATE booking.holds SET status='CONVERTED' WHERE id=$1", [hold.id]);
+        await tx.query('UPDATE booking.reservations SET booking_id=$2 WHERE hold_id=$1', [hold.id, booking.id]);
+        await tx.query("INSERT INTO booking.status_history(booking_id,to_status,actor_id,reason) VALUES($1,'PENDING_PAYMENT',$2,'weekly series')",
+          [booking.id, userId]);
+        await emitEvent(tx, userId, 'booking.pending_payment', { bookingId: booking.id, seriesId: series.id }, requestId);
+        bookings.push(booking);
+      }
+      return { seriesId: series.id, frequency: 'WEEKLY', bookings,
+        note: 'Each booking requires its own payment intent; no automatic recurring charge is configured' };
+    });
+  }
+  async series(userId: string, id: string) {
+    const row = (await this.db.query('SELECT * FROM booking.series WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
+    invariant(row, 'NOT_FOUND', 'Booking series not found', 404);
+    const bookings = (await this.db.query('SELECT * FROM booking.bookings WHERE series_id=$1 AND user_id=$2 ORDER BY starts_at', [id, userId])).rows;
+    return { ...row, bookings };
+  }
   async get(userId: string, id: string, tx: DbClient = this.db.pool) {
     const row = (await tx.query('SELECT * FROM booking.bookings WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
     invariant(row, 'NOT_FOUND', 'Booking not found', 404);
@@ -114,6 +153,84 @@ export class BookingService {
       await tx.query('UPDATE booking.reservations SET active=false WHERE booking_id=$1', [id]);
       return row;
     });
+  }
+  async inviteParticipant(userId: string, bookingId: string, participantId: string, requestId: string) {
+    invariant(userId !== participantId, 'INVALID_PARTICIPANT', 'Owner is already part of the booking', 400);
+    return this.db.transaction(async tx => {
+      const booking = await this.get(userId, bookingId, tx);
+      await tx.query('SELECT id FROM booking.bookings WHERE id=$1 FOR UPDATE', [bookingId]);
+      invariant(booking.status !== 'CANCELLED' && booking.status !== 'EXPIRED' && booking.ends_at.getTime() > Date.now(),
+        'BOOKING_CLOSED', 'Booking is closed');
+      const target = await tx.query("SELECT 1 FROM identity.users WHERE id=$1 AND status='ACTIVE'", [participantId]);
+      invariant(target.rowCount, 'USER_UNAVAILABLE', 'Participant is unavailable', 404);
+      const count = (await tx.query('SELECT count(*)::int AS n FROM booking.participants WHERE booking_id=$1', [bookingId])).rows[0].n;
+      invariant(count < 20, 'PARTICIPANT_LIMIT', 'Booking participant limit reached');
+      const row = (await tx.query(`INSERT INTO booking.participants(booking_id,user_id,status)
+        VALUES($1,$2,'INVITED') ON CONFLICT(booking_id,user_id) DO UPDATE SET status='INVITED'
+        RETURNING *`, [bookingId, participantId])).rows[0];
+      await emitEvent(tx, participantId, 'booking.participant_invited', { bookingId }, requestId);
+      return row;
+    });
+  }
+  async participants(userId: string, bookingId: string) {
+    await this.get(userId, bookingId);
+    return (await this.db.query('SELECT user_id,status,created_at FROM booking.participants WHERE booking_id=$1 ORDER BY created_at', [bookingId])).rows;
+  }
+  async acceptParticipant(userId: string, bookingId: string) {
+    return this.db.transaction(async tx => {
+      const booking = (await tx.query('SELECT status,ends_at FROM booking.bookings WHERE id=$1', [bookingId])).rows[0];
+      invariant(booking && booking.status !== 'CANCELLED' && booking.status !== 'EXPIRED' && booking.ends_at.getTime() > Date.now(),
+        'BOOKING_CLOSED', 'Booking is closed');
+      const row = (await tx.query(`UPDATE booking.participants SET status='ACCEPTED' WHERE booking_id=$1 AND user_id=$2
+        AND status IN ('INVITED','ACCEPTED') RETURNING *`, [bookingId, userId])).rows[0];
+      invariant(row, 'NOT_FOUND', 'Participant invitation not found', 404);
+      return row;
+    });
+  }
+  async removeParticipant(userId: string, bookingId: string, participantId: string) {
+    await this.get(userId, bookingId);
+    const result = await this.db.query('DELETE FROM booking.participants WHERE booking_id=$1 AND user_id=$2', [bookingId, participantId]);
+    return { removed: Boolean(result.rowCount) };
+  }
+  async addService(userId: string, bookingId: string, dto: BookingServiceDto, key: string | undefined, requestId: string) {
+    return this.idem.run(userId, `booking-service:${bookingId}`, key, dto, async tx => {
+      await this.get(userId, bookingId, tx);
+      const booking = await this.lock(tx, bookingId);
+      invariant(booking.status === 'PENDING_PAYMENT' && booking.payment_expires_at.getTime() > Date.now(),
+        'BOOKING_CLOSED', 'Services can be added only before payment');
+      const intent = await tx.query('SELECT 1 FROM payment.intents WHERE booking_id=$1', [bookingId]);
+      invariant(!intent.rowCount, 'PAYMENT_ALREADY_STARTED', 'Services cannot change after payment starts');
+      const service = (await tx.query('SELECT * FROM catalog.services WHERE id=$1 AND branch_id=$2',
+        [dto.serviceId, booking.branch_id])).rows[0];
+      invariant(service, 'SERVICE_UNAVAILABLE', 'Service is unavailable for this branch', 404);
+      const existing = await tx.query('SELECT 1 FROM booking.services WHERE booking_id=$1 AND service_id=$2', [bookingId, dto.serviceId]);
+      invariant(!existing.rowCount, 'SERVICE_ALREADY_ADDED', 'Service is already on the booking');
+      const amount = booking.amount + service.price * dto.quantity;
+      invariant(Number.isSafeInteger(amount) && amount <= 1000000000, 'INVALID_BOOKING_AMOUNT', 'Booking amount exceeds limit', 400);
+      const row = (await tx.query(`INSERT INTO booking.services(booking_id,service_id,quantity,unit_price)
+        VALUES($1,$2,$3,$4) RETURNING *`, [bookingId, dto.serviceId, dto.quantity, service.price])).rows[0];
+      await tx.query('UPDATE booking.bookings SET amount=$2,updated_at=now(),version=version+1 WHERE id=$1', [bookingId, amount]);
+      await emitEvent(tx, userId, 'booking.service_added', { bookingId, serviceId: dto.serviceId, amount }, requestId);
+      return { ...row, amount };
+    });
+  }
+  async review(userId: string, bookingId: string, dto: ReviewDto, requestId: string) {
+    return this.db.transaction(async tx => {
+      const booking = await this.get(userId, bookingId, tx);
+      invariant(booking.status === 'CONFIRMED' && booking.ends_at.getTime() <= Date.now(),
+        'REVIEW_NOT_ALLOWED', 'Review is allowed only after a completed confirmed booking');
+      const row = (await tx.query(`INSERT INTO booking.reviews(booking_id,user_id,rating,comment)
+        VALUES($1,$2,$3,$4) ON CONFLICT(booking_id) DO NOTHING RETURNING *`,
+        [bookingId, userId, dto.rating, dto.comment.trim()])).rows[0];
+      invariant(row, 'REVIEW_ALREADY_EXISTS', 'Booking has already been reviewed');
+      await emitEvent(tx, userId, 'booking.reviewed', { bookingId, reviewId: row.id }, requestId);
+      return row;
+    });
+  }
+  async reviews(branchId: string) {
+    await this.catalog.branch(branchId);
+    return (await this.db.query(`SELECT r.id,r.rating,r.comment,r.created_at,b.yard_id FROM booking.reviews r
+      JOIN booking.bookings b ON b.id=r.booking_id WHERE b.branch_id=$1 ORDER BY r.created_at DESC LIMIT 100`, [branchId])).rows;
   }
   async availability(branchId: string, q: AvailabilityQuery) {
     await this.catalog.branch(branchId);

@@ -7,7 +7,11 @@ import { invariant } from '../../packages/contracts/errors';
 export class ContentService {
   constructor(private readonly db: Database) {}
   config() { return { minimumAndroidVersionCode: 2603, latestAndroidVersionCode: 2603,
-    features: { booking: true, sandboxPayment: true, socialLogin: false, membership: false, academy: false, chat: false, mediaUpload: false },
+    features: { booking: true, sandboxPayment: true, socialLogin: Boolean(process.env.FIREBASE_PROJECT_ID && process.env.GOOGLE_APPLICATION_CREDENTIALS),
+      membership: true, paidMembership: false, academy: true, paidClasses: false, socialEvents: true,
+      paidTickets: false, commerce: true, chat: true, chatE2E: false, mediaUpload: false,
+      courtImageUpload: Boolean(process.env.R2_ACCOUNT_ID && process.env.R2_BUCKET &&
+        process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY) },
     feedbackEmail: 'support@your-domain.com' }; }
   async document(slug: string) {
     const row = (await this.db.query('SELECT * FROM content.documents WHERE slug=$1', [slug])).rows[0];

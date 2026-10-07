@@ -1,0 +1,6 @@
+# Migration checksums are computed over raw bytes; keep LF on every platform.
+* text=auto eol=lf
+*.pdf binary
+*.png binary
+*.jpg binary
+*.webp binary

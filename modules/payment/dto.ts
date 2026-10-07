@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsInt, IsString, IsUUID, Length, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Min, ValidateIf } from 'class-validator';
 export class IntentDto {
-  @ApiProperty() @IsUUID('4') bookingId!: string;
+  @ApiProperty({ required: false }) @ValidateIf(o => !o.orderId || o.bookingId !== undefined) @IsUUID('4') bookingId?: string;
+  @ApiProperty({ required: false }) @ValidateIf(o => !o.bookingId || o.orderId !== undefined) @IsUUID('4') orderId?: string;
 }
 export class SandboxWebhookDto {
   @ApiProperty() @IsString() @Length(8, 128) eventId!: string;

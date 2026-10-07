@@ -67,6 +67,41 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
+  migrate-python:
+    image: alobo-backend-fastapi:local
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.fastapi
+    env_file: ../.env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://alobo:alobo_local@postgres:5432/alobo
+      REDIS_URL: redis://redis:6379
+    command: ["python", "-m", "alobo_api.migrate"]
+    profiles: ["python"]
+    depends_on:
+      postgres: { condition: service_healthy }
+  api-python:
+    image: alobo-backend-fastapi:local
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.fastapi
+    env_file: ../.env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://alobo:alobo_local@postgres:5432/alobo
+      REDIS_URL: redis://redis:6379
+    ports: ["127.0.0.1:8000:8000"]
+    profiles: ["python"]
+    restart: unless-stopped
+    depends_on:
+      migrate-python: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 volumes:
   postgres-data:
   redis-data:
