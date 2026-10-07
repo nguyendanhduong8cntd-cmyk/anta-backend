@@ -197,8 +197,9 @@ test('outbox -> BullMQ -> durable notification is deduplicated and user-scoped',
   const queueName = `alobo-integration-${runId}`, queue = new Queue(queueName, { connection });
   const worker = new Worker(queueName, job => deliverNotification(db, job.data.eventId), { connection });
   try {
-    await dispatchOutbox(db, queue);
-    for (let attempt = 0; attempt < 100; attempt++) {
+    // Earlier local runs can leave more pending events than one batch; drain them all.
+    while (await dispatchOutbox(db, queue));
+    for (let attempt = 0; attempt < 400; attempt++) {
       const counts = await queue.getJobCounts('wait', 'active', 'failed');
       assert.equal(counts.failed, 0);
       if (!counts.wait && !counts.active) break;
