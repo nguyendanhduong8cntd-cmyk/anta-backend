@@ -12,9 +12,6 @@ import { PaymentModule } from '../../modules/payment/module';
 import { NotificationModule } from '../../modules/notification/module';
 import { ContentModule } from '../../modules/content/module';
 import { AccessModule } from '../../packages/access';
-import { MembershipModule } from '../../modules/membership/module';
-import { AcademyModule } from '../../modules/academy/module';
-import { SocialModule } from '../../modules/social/module';
 import { CommerceModule } from '../../modules/commerce/module';
 import { ChatModule } from '../../modules/chat/module';
 import { AdminModule } from '../../modules/admin/module';
@@ -34,7 +31,7 @@ class HealthController {
 }
 @Module({
   imports: [DatabaseModule, RedisModule, AuthModule, IdempotencyModule, AccessModule, RefundModule, IdentityModule, CatalogModule,
-    BookingModule, PaymentModule, NotificationModule, ContentModule, MembershipModule, AcademyModule, SocialModule, CommerceModule, ChatModule, AdminModule, MediaModule],
+    BookingModule, PaymentModule, NotificationModule, ContentModule, CommerceModule, ChatModule, AdminModule, MediaModule],
   controllers: [HealthController], providers: [{ provide: APP_GUARD, useClass: AuthGuard }]
 })
 export class ApiModule {}

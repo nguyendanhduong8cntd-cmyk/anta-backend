@@ -65,11 +65,10 @@ def create_app() -> FastAPI:
         # Only implemented Python features are reported enabled in this port.
         return envelope(request, {"minimumAndroidVersionCode": 2603, "latestAndroidVersionCode": 2603,
             "features": {"booking": False, "sandboxPayment": False, "socialLogin": False,
-                "membership": False, "paidMembership": False, "academy": False, "paidClasses": False,
-                "socialEvents": False, "paidTickets": False, "commerce": False, "chat": False,
-                "chatE2E": False, "mediaUpload": False,
+                "commerce": False, "chat": False, "chatE2E": False, "mediaUpload": False,
                 "courtImageUpload": request.app.state.settings.r2_configured},
-            "feedbackEmail": "support@your-domain.com"})
+            # Sign-in is not ported, so this port never names a Google client to sign in with.
+            "googleClientId": None, "feedbackEmail": "support@your-domain.com"})
 
     @app.get("/api/v1/public/content/{slug}", tags=["content"])
     async def document(request: Request, slug: str, conn=Depends(connection)):

@@ -81,8 +81,7 @@ export class AdminService {
   async intents(actorId: string, q: AdminListQuery) {
     await this.access.admin(actorId);
     return (await this.db.query(`SELECT i.id,i.user_id,u.identifier,i.provider,i.order_code::text AS order_code,i.amount,i.currency,i.status,i.created_at,i.updated_at,
-      CASE WHEN i.booking_id IS NOT NULL THEN 'booking' WHEN i.order_id IS NOT NULL THEN 'order' WHEN i.contract_id IS NOT NULL THEN 'membership'
-        WHEN i.enrollment_id IS NOT NULL THEN 'class' ELSE 'ticket' END AS target,
+      CASE WHEN i.booking_id IS NOT NULL THEN 'booking' ELSE 'order' END AS target,
       (SELECT r.status FROM payment.refunds r WHERE r.intent_id=i.id) AS refund_status
       FROM payment.intents i JOIN identity.users u ON u.id=i.user_id WHERE ($1::text IS NULL OR i.status=$1)
       ORDER BY i.created_at DESC LIMIT $2 OFFSET $3`, [q.status || null, PAGE, ((q.page || 1) - 1) * PAGE])).rows;

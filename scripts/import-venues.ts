@@ -120,15 +120,24 @@ function priceText(row: PriceRow, columns: string[] = []) {
   if (row.fixed === null || row.fixed === row.walkIn) return money(row.walkIn) + unit;
   return `${columns[1] || 'Vãng lai'} ${money(row.walkIn)}${unit}, ${(columns[0] || 'Cố định').toLowerCase()} ${money(row.fixed)}${unit}`;
 }
+/** The venue's published price lists, one per line: "<title>: <days> <time>: <price>; ...". Sports, hours and
+ *  rating have their own columns, and where a listing was collected from stays in the import file. */
 export function describe(venue: Venue) {
-  const lines = [`Môn: ${venue.sports.join(', ') || 'chưa rõ'}. Giờ hoạt động: ${venue.hours}.`];
-  if (venue.rating) lines.push(`Đánh giá ${venue.rating}/5 (${venue.reviewCount || 0} lượt).`);
-  for (const table of venue.priceTables || []) {
-    const title = [...new Set([table.group, table.name].filter(Boolean))].join(' - ') || 'Bảng giá';
-    lines.push(`${title}: ` + table.rows.map(row => `${row.days ? row.days + ' ' : ''}${row.time}: ${priceText(row, table.columns)}`).join('; ') + '.');
-  }
-  const source = venue.bookingUrl ? `Nguồn: ${venue.bookingUrl}` : '';
-  return [lines.join('\n').slice(0, Math.max(0, MAX_DESCRIPTION - source.length - 1)), source].filter(Boolean).join('\n').slice(0, MAX_DESCRIPTION);
+  const lines = (venue.priceTables || []).map(table => {
+    const group = table.group?.trim() || '', name = table.name?.trim() || '';
+    const title = fold(name).startsWith(fold(group)) ? name || 'Bảng giá' : [group, name].filter(Boolean).join(' - ');
+    const bands = table.rows.map(row => `${row.days ? row.days + ' ' : ''}${row.time}: ${priceText(row, table.columns)}`);
+    return `${title}: ${[...new Set(bands)].join('; ')}.`;
+  });
+  // Drop whole lists from the end when the text is too long, so every list shown is complete; one oversized list is cut.
+  while (lines.length > 1 && lines.join('\n').length > MAX_DESCRIPTION) lines.pop();
+  return lines.join('\n').slice(0, MAX_DESCRIPTION);
+}
+/** The rating a venue advertises; none when the figure is missing or is not a score out of five. */
+export function advertisedRating(venue: Venue): { rating: number | null; reviewCount: number } {
+  const rating = venue.rating, count = venue.reviewCount;
+  if (typeof rating !== 'number' || !(rating > 0 && rating <= 5)) return { rating: null, reviewCount: 0 };
+  return { rating: Math.round(rating * 10) / 10, reviewCount: typeof count === 'number' && Number.isInteger(count) && count > 0 && count < 2 ** 31 ? count : 0 };
 }
 /** Whether a record from the file has everything a branch needs. Records that do not are reported, not imported. */
 export function isImportable(venue: Venue) {
@@ -142,20 +151,23 @@ export function isImportable(venue: Venue) {
 export function isLocalDatabase(url: string | undefined) {
   try { return LOCAL_HOSTS.includes(new URL(url || '').hostname); } catch { return false; }
 }
-/** List thumbnails are small; the same object without the `-thumb` suffix is the full-size photo. */
-const fullSize = (url: string) => url.replace(/-thumb(\.\w+)$/, '$1');
+/** A venue's photos, cover first, exactly as the source lists them. They are its thumbnails on purpose: the
+ *  full-size originals do not exist for covers and run to 13 MB each for gallery photos. */
+export function venueImages(venue: Venue): string[] {
+  return [...new Set([venue.cover, ...(venue.gallery || []), venue.yardDiagram].filter((url): url is string => Boolean(url)))];
+}
 
 async function importVenue(tx: PoolClient, venue: Venue, data: VenueFile, sportIds: Map<string, string>) {
   const shopId = stableId(`shop:${venue.slug}`), branchId = stableId(`branch:${venue.slug}`), hours = openingHours(venue.hours);
-  const images = [...new Set([venue.cover, ...(venue.gallery || []), venue.yardDiagram].filter((url): url is string => Boolean(url)).map(fullSize))];
+  const advertised = advertisedRating(venue);
   await tx.query('INSERT INTO catalog.shops(id,name) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET name=excluded.name', [shopId, venue.name]);
-  await tx.query(`INSERT INTO catalog.branches(id,shop_id,name,address,description,location,opening_hour,closing_hour,images,rules)
-    VALUES($1,$2,$3,$4,$5,ST_SetSRID(ST_MakePoint($7,$6),4326)::geography,$8,$9,$10,$11)
+  await tx.query(`INSERT INTO catalog.branches(id,shop_id,name,address,description,location,opening_hour,closing_hour,images,rules,rating,review_count)
+    VALUES($1,$2,$3,$4,$5,ST_SetSRID(ST_MakePoint($7,$6),4326)::geography,$8,$9,$10,$11,$12,$13)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name,address=excluded.address,description=excluded.description,location=excluded.location,
       opening_hour=excluded.opening_hour,closing_hour=excluded.closing_hour,images=excluded.images,rules=excluded.rules,
-      updated_at=now(),version=catalog.branches.version+1`,
+      rating=excluded.rating,review_count=excluded.review_count,updated_at=now(),version=catalog.branches.version+1`,
     [branchId, shopId, venue.name, venue.address, describe(venue), venue.location!.lat, venue.location!.lng, hours.opening, hours.closing,
-      JSON.stringify(images), JSON.stringify(venue.rules || [])]);
+      JSON.stringify(venueImages(venue)), JSON.stringify(venue.rules || []), advertised.rating, advertised.reviewCount]);
   const yards = yardsOf(venue).map(yard => ({ ...yard, id: stableId(`yard:${venue.slug}:${yard.key}`) }));
   for (const yard of yards) {
     await tx.query(`INSERT INTO catalog.yards(id,branch_id,sport_id,name,hourly_price,active) VALUES($1,$2,$3,$4,$5,true)

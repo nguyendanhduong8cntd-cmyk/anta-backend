@@ -14,7 +14,7 @@ process.env.NODE_ENV = 'test';
 process.env.DEV_OTP_ENABLED = 'true';
 process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';
-for (const key of ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT']) delete process.env[key];
+for (const key of ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL']) delete process.env[key];
 const runId = randomUUID().slice(0, 8);
 process.env.REDIS_KEY_PREFIX = `alobo-domains-${runId}:`;
 const branchId = randomUUID();
@@ -58,58 +58,6 @@ before(async () => {
   base = `${await app.getUrl()}/api/v1`;
 });
 after(async () => { await app?.close(); await pool?.end(); });
-
-test('membership-only event consumes exactly one credit and QR scan is staff-only and one-time', async () => {
-  const owner = await account('owner'), a = await account('member-a'), b = await account('member-b');
-  assert.equal((await request('/membership-plans', 'POST', { branchId, name: 'Free plan', price: 0, credits: 2, durationDays: 30 }, owner.accessToken)).status, 403);
-  await role(owner.user.id, 'branch_owner');
-  const plan = await request('/membership-plans', 'POST', { branchId, name: 'Free plan', price: 0, credits: 2, durationDays: 30 }, owner.accessToken);
-  assert.equal(plan.status, 201);
-  const paid = await request('/membership-plans', 'POST', { branchId, name: 'Paid plan', price: 10000, credits: 2, durationDays: 30 }, owner.accessToken);
-  assert.equal(paid.status, 201);
-  const pendingPaid = await request('/membership-contracts', 'POST', { planId: paid.body.data.id }, a.accessToken, key());
-  assert.deepEqual([pendingPaid.status, pendingPaid.body.data.status], [201, 'PENDING_PAYMENT']);
-  const enrollment = await request('/membership-contracts', 'POST', { planId: plan.body.data.id }, a.accessToken, key());
-  assert.equal(enrollment.status, 201);
-  const start = new Date(Date.now() + 86400000), end = new Date(start.getTime() + 3600000);
-  const event = await request('/events', 'POST', { branchId, title: 'Member match', description: '', startsAt: start.toISOString(),
-    endsAt: end.toISOString(), capacity: 1, ticketPrice: 0, membershipRequired: true }, owner.accessToken);
-  assert.equal(event.status, 201);
-  assert.equal((await request(`/events/${event.body.data.id}/tickets`, 'POST', {}, b.accessToken, key())).status, 409);
-  const ticketKey = key(), payload = { contractId: enrollment.body.data.id };
-  const ticket = await request(`/events/${event.body.data.id}/tickets`, 'POST', payload, a.accessToken, ticketKey);
-  assert.equal(ticket.status, 201);
-  const retry = await request(`/events/${event.body.data.id}/tickets`, 'POST', payload, a.accessToken, ticketKey);
-  assert.equal(retry.body.data.id, ticket.body.data.id);
-  assert.equal((await request(`/events/${event.body.data.id}/tickets`, 'POST', {}, b.accessToken, key())).status, 409);
-  assert.equal((await request(`/tickets/scan`, 'POST', { token: ticket.body.data.qrToken }, b.accessToken)).status, 403);
-  const scanned = await request('/tickets/scan', 'POST', { token: ticket.body.data.qrToken }, owner.accessToken);
-  assert.equal(scanned.status, 201);
-  assert.equal((await request('/tickets/scan', 'POST', { token: ticket.body.data.qrToken }, owner.accessToken)).status, 409);
-  const contract = await request(`/membership-contracts/${enrollment.body.data.id}`, 'GET', undefined, a.accessToken);
-  assert.equal(contract.body.data.remaining_credits, 1);
-  const usages = await request(`/membership-contracts/${enrollment.body.data.id}/usages`, 'GET', undefined, a.accessToken);
-  assert.equal(usages.body.data.length, 1);
-});
-
-test('academy enrollment respects capacity and branch role', async () => {
-  const owner = await account('academy-owner'), a = await account('student-a'), b = await account('student-b');
-  await role(owner.user.id, 'branch_owner');
-  const center = await request('/academy/centers', 'POST', { branchId, name: 'Test center', description: '' }, owner.accessToken);
-  assert.equal(center.status, 201);
-  const course = await request('/academy/courses', 'POST', { centerId: center.body.data.id, sportId: demoIds.sport,
-    name: 'Badminton basics', description: '' }, owner.accessToken);
-  assert.equal(course.status, 201);
-  const start = new Date(Date.now() + 172800000), end = new Date(start.getTime() + 3600000);
-  const klass = await request('/academy/classes', 'POST', { courseId: course.body.data.id, startsAt: start.toISOString(),
-    endsAt: end.toISOString(), capacity: 1, price: 0 }, owner.accessToken);
-  assert.equal(klass.status, 201);
-  const outcomes = await Promise.all([a, b].map(u => request(`/academy/classes/${klass.body.data.id}/enrollments`, 'POST', {}, u.accessToken, key())));
-  assert.deepEqual(outcomes.map(x => x.status).sort(), [201, 409]);
-  const winner = outcomes[0].status === 201 ? a : b, loser = winner === a ? b : a;
-  assert.equal((await request(`/academy/enrollments/${outcomes.find(x => x.status === 201)!.body.data.id}`, 'DELETE', undefined, winner.accessToken)).status, 200);
-  assert.equal((await request(`/academy/classes/${klass.body.data.id}/enrollments`, 'POST', {}, loser.accessToken, key())).status, 201);
-});
 
 test('voucher quota, order ownership, signed payment and cancellation', async () => {
   const owner = await account('commerce-owner'), a = await account('buyer-a'), b = await account('buyer-b');
@@ -216,30 +164,6 @@ test('weekly series creates all weeks atomically and preserves idempotency', asy
   assert.equal((await request(`/booking-series/${created.body.data.seriesId}`, 'GET', undefined, other.accessToken)).status, 404);
 });
 
-test('staff can score a match only for ticketed teams after event starts', async () => {
-  const [owner, a, b] = chatUsers;
-  const start = new Date(Date.now() + 86400000), end = new Date(start.getTime() + 3600000);
-  const event = await request('/events', 'POST', { branchId, title: 'Team match', description: '',
-    startsAt: start.toISOString(), endsAt: end.toISOString(), capacity: 2, ticketPrice: 0 }, owner.accessToken);
-  assert.equal(event.status, 201);
-  const home = await request('/teams', 'POST', { name: 'Home team' }, a.accessToken);
-  const away = await request('/teams', 'POST', { name: 'Away team' }, b.accessToken);
-  assert.equal(home.status, 201); assert.equal(away.status, 201);
-  const payload = { homeTeamId: home.body.data.id, awayTeamId: away.body.data.id };
-  assert.equal((await request(`/events/${event.body.data.id}/matches`, 'POST', payload, owner.accessToken)).status, 409);
-  assert.equal((await request(`/events/${event.body.data.id}/tickets`, 'POST', {}, a.accessToken, key())).status, 201);
-  assert.equal((await request(`/events/${event.body.data.id}/tickets`, 'POST', {}, b.accessToken, key())).status, 201);
-  assert.equal((await request(`/events/${event.body.data.id}/matches`, 'POST', payload, a.accessToken)).status, 403);
-  const match = await request(`/events/${event.body.data.id}/matches`, 'POST', payload, owner.accessToken);
-  assert.equal(match.status, 201);
-  assert.equal((await request(`/matches/${match.body.data.id}/result`, 'POST', { homeScore: 2, awayScore: 1 }, owner.accessToken)).status, 409);
-  await pool.query("UPDATE social.events SET starts_at=now()-interval '1 hour',ends_at=now()+interval '1 hour' WHERE id=$1", [event.body.data.id]);
-  const result = await request(`/matches/${match.body.data.id}/result`, 'POST', { homeScore: 2, awayScore: 1 }, owner.accessToken);
-  assert.equal(result.status, 201);
-  assert.equal(result.body.data.status, 'FINISHED');
-  assert.equal((await request(`/matches/${match.body.data.id}/result`, 'POST', { homeScore: 3, awayScore: 1 }, owner.accessToken)).status, 409);
-});
-
 test('court photo R2 signing is owner-only and signed reads follow branch/yard scope', async () => {
   const [owner, other] = chatUsers;
   const dto = { mimeType: 'image/png', size: 1024, yardId };
@@ -293,7 +217,7 @@ test('admin grants are audited and account deletion revokes all sessions', async
   assert.ok(audit.body.data.some((event: any) => event.action === 'role.grant' && event.target_id === member.user.id));
   const revoked = await request('/admin/roles', 'DELETE', { userId: member.user.id, role: 'branch_staff', branchId }, admin.accessToken);
   assert.equal(revoked.status, 200);
-  assert.equal((await request('/users/me/linked-accounts', 'POST', { firebaseIdToken: 'x'.repeat(100) }, member.accessToken)).status, 503);
+  assert.equal((await request('/users/me/linked-accounts', 'POST', { idToken: 'x'.repeat(100), password: 'test-password-long-123' }, member.accessToken)).status, 503);
   assert.equal((await request('/users/me', 'DELETE', { password: 'wrong' }, other.accessToken)).status, 401);
   const deleted = await request('/users/me', 'DELETE', { password: 'test-password-long-123' }, other.accessToken);
   assert.equal(deleted.status, 200);

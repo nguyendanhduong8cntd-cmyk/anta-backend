@@ -15,8 +15,6 @@ export function bookingRefundPercent(startsAt: Date, now: number, policy: Policy
 }
 /** Service orders are fully refundable for a fixed window after payment. */
 export const orderRefundPercent = (paidAt: Date, now: number, policy: Policy) => (now - paidAt.getTime()) / 3600000 <= policy.orderHours ? 100 : 0;
-/** Class fees are fully refundable until the full-refund window before the first session closes. */
-export const classRefundPercent = (startsAt: Date, now: number, policy: Policy) => (startsAt.getTime() - now) / 3600000 >= policy.fullHours ? 100 : 0;
 export const refundAmount = (amount: number, percent: number) => Math.floor(amount * percent / 100);
 
 @Injectable()
@@ -24,7 +22,7 @@ export class RefundService {
   constructor(private readonly db: Database, private readonly access: AccessService) {}
   readonly policy = loadConfig().refund;
   private column(target: string) {
-    const column = ({ booking: 'booking_id', order: 'order_id', contract: 'contract_id', enrollment: 'enrollment_id', ticket: 'ticket_id' } as Record<string, string>)[target];
+    const column = ({ booking: 'booking_id', order: 'order_id' } as Record<string, string>)[target];
     invariant(column, 'INVALID_PAYMENT_TARGET', 'Unknown payment target', 400);
     return column;
   }
@@ -73,7 +71,7 @@ export class RefundService {
   // ---- admin ----
   async list(actorId: string, status?: string) {
     await this.access.admin(actorId);
-    return (await this.db.query(`SELECT r.*,i.provider,i.order_code,i.booking_id,i.order_id,i.contract_id,i.enrollment_id,i.ticket_id
+    return (await this.db.query(`SELECT r.*,i.provider,i.order_code,i.booking_id,i.order_id
       FROM payment.refunds r JOIN payment.intents i ON i.id=r.intent_id WHERE ($1::text IS NULL OR r.status=$1)
       ORDER BY r.created_at DESC LIMIT 200`, [status || null])).rows;
   }

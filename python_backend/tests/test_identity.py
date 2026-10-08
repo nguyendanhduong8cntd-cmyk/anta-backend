@@ -32,6 +32,7 @@ def test_existing_jwt_profile_update_and_logout():
                 profile = client.get("/api/v1/users/me", headers=headers)
                 assert profile.status_code == 200
                 assert profile.json()["data"]["displayName"] == "Test"
+                assert profile.json()["data"]["passwordLogin"] is True
 
                 updated = client.patch("/api/v1/users/me", headers=headers,
                     json={"displayName": "  New name  "})
@@ -42,10 +43,21 @@ def test_existing_jwt_profile_update_and_logout():
                 invalid = client.patch("/api/v1/users/me", headers=headers, json={"displayName": "   "})
                 assert invalid.status_code == 400
 
+                # A favourite is listed as the venue card the public list shows, minus the distance.
+                listed = client.get("/api/v1/public/branches", params={"pageSize": 1}).json()["data"]["items"]
+                assert client.get("/api/v1/users/me/favorites", headers=headers).json()["data"] == []
+                if listed:
+                    card = {key: value for key, value in listed[0].items() if key != "distance_meters"}
+                    assert client.post(f"/api/v1/users/me/favorites/{card['id']}", headers=headers).status_code == 201
+                    assert client.get("/api/v1/users/me/favorites", headers=headers).json()["data"] == [card]
+                    assert client.delete(f"/api/v1/users/me/favorites/{card['id']}", headers=headers).status_code == 200
+                    assert client.get("/api/v1/users/me/favorites", headers=headers).json()["data"] == []
+
                 logout = client.post("/api/v1/auth/logout", headers=headers)
                 assert logout.status_code == 200
                 assert logout.json()["data"]["loggedOut"] is True
                 assert client.get("/api/v1/users/me", headers=headers).status_code == 401
             finally:
+                db.execute("DELETE FROM catalog.favorites WHERE user_id=%s", (user_id,))
                 db.execute("DELETE FROM identity.refresh_sessions WHERE id=%s", (session_id,))
                 db.execute("DELETE FROM identity.users WHERE id=%s", (user_id,))

@@ -35,13 +35,16 @@ export class DeviceDto {
   @ApiProperty() @IsString() @Length(20, 4096) fcmToken!: string;
 }
 export class SocialDto {
-  @ApiProperty() @IsString() @Length(100, 10000) firebaseIdToken!: string;
+  @ApiProperty({ description: 'Google ID token for one of this backend\'s OAuth clients' }) @IsString() @Length(100, 10000) idToken!: string;
   @ApiProperty() @IsString() @Length(1, 128) deviceId!: string;
 }
-export class LinkAccountDto {
-  @ApiProperty() @IsString() @Length(100, 10000) firebaseIdToken!: string;
+export class ReauthDto {
+  @ApiProperty({ description: 'The account password, typed again' }) @IsString() @Length(1, 128) password!: string;
+}
+export class LinkAccountDto extends ReauthDto {
+  @ApiProperty() @IsString() @Length(100, 10000) idToken!: string;
 }
 export class DeleteAccountDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @Length(1, 128) password?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @Length(100, 10000) firebaseIdToken?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @Length(100, 10000) idToken?: string;
 }

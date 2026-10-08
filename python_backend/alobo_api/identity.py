@@ -15,12 +15,12 @@ class ProfileUpdate(BaseModel):
 
 
 async def profile_row(conn: AsyncConnection, user_id):
-    cur = await conn.execute("""SELECT id,identifier,display_name,created_at,version
+    cur = await conn.execute("""SELECT id,identifier,display_name,password_login_enabled,created_at,version
         FROM identity.users WHERE id=%s""", (user_id,))
     row = await cur.fetchone()
     require(row, "NOT_FOUND", "User not found", 404)
     return {"id": row["id"], "identifier": row["identifier"],
-        "displayName": row["display_name"], "createdAt": row["created_at"],
+        "displayName": row["display_name"], "passwordLogin": row["password_login_enabled"], "createdAt": row["created_at"],
         "version": row["version"]}
 
 

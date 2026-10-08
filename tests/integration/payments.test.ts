@@ -12,6 +12,7 @@ import { signWebhook } from '../../modules/payment/signature';
 import { payosSign, vnpaySign } from '../../modules/payment/providers';
 import { IdentityService } from '../../modules/identity/service';
 import { RefundService } from '../../modules/payment/refunds';
+import { buildOpenApi } from '../../packages/contracts/openapi';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://alobo:alobo_local@127.0.0.1:55432/alobo_test';
 assert.match(new URL(process.env.DATABASE_URL).pathname, /_test$/);
@@ -27,7 +28,7 @@ const branchId = randomUUID(), yardId = randomUUID(), serviceId = randomUUID();
 const payosKey = 'payos-checksum-key-for-tests-only', vnpaySecret = 'vnpay-hash-secret-for-tests-only';
 let app: INestApplication, origin: string, base: string, pool: Pool, fakePayos: Server, payosRequests: any[] = [];
 type Account = { user: { id: string }; accessToken: string; refreshToken: string; identifier: string };
-let owner: Account, admin: Account, alice: Account, bob: Account, leaver: Account;
+let admin: Account, alice: Account, bob: Account, leaver: Account;
 
 async function request(path: string, method = 'GET', body?: unknown, jwt?: string, headers: Record<string, string> = {}) {
   const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json',
@@ -99,8 +100,7 @@ before(async () => {
   await new Promise<void>(resolve => fakePayos.listen(0, '127.0.0.1', resolve));
   app = await createApplication(); await app.listen(0, '127.0.0.1');
   origin = await app.getUrl(); base = `${origin}/api/v1`;
-  [owner, admin, alice, bob, leaver] = await Promise.all(['owner', 'admin', 'alice', 'bob', 'leaver'].map(account));
-  await pool.query("INSERT INTO identity.roles(user_id,role,branch_id) VALUES($1,'branch_owner',$2)", [owner.user.id, branchId]);
+  [admin, alice, bob, leaver] = await Promise.all(['admin', 'alice', 'bob', 'leaver'].map(account));
   await pool.query("INSERT INTO identity.roles(user_id,role) VALUES($1,'admin')", [admin.user.id]);
 });
 after(async () => { await app?.close(); await pool?.end(); await new Promise(resolve => fakePayos?.close(resolve)); });
@@ -148,50 +148,27 @@ test('paid order can be cancelled for a full refund', async () => {
   assert.deepEqual([cancelled.body.data.refund.amount, cancelled.body.data.refund.status], [60000, 'SUCCEEDED']);
 });
 
-test('paid membership, class and ticket activate only after a signed payment', async () => {
-  const plan = await request('/membership-plans', 'POST', { branchId, name: 'Paid plan', price: 250000, credits: 5, durationDays: 30 }, owner.accessToken);
-  assert.equal(plan.status, 201);
-  const contract = await request('/membership-contracts', 'POST', { planId: plan.body.data.id }, alice.accessToken, key());
-  assert.equal(contract.status, 201);
-  assert.deepEqual([contract.body.data.status, contract.body.data.amount], ['PENDING_PAYMENT', 250000]);
-  // Asking again returns the same pending contract instead of opening a second checkout.
-  assert.equal((await request('/membership-contracts', 'POST', { planId: plan.body.data.id }, alice.accessToken, key())).body.data.id, contract.body.data.id);
-  // Someone else cannot pay for, or read, this contract.
-  assert.equal((await request('/payment-intents', 'POST', { contractId: contract.body.data.id }, bob.accessToken, key())).status, 404);
-  assert.equal((await request('/payment-intents', 'POST', { contractId: contract.body.data.id, bookingId: randomUUID() }, alice.accessToken, key())).status, 400);
-  const contractIntent = await request('/payment-intents', 'POST', { contractId: contract.body.data.id }, alice.accessToken, key());
-  assert.equal(contractIntent.status, 201, JSON.stringify(contractIntent.body));
-  assert.equal(contractIntent.body.data.amount, 250000);
-  assert.equal((await sandboxPay(contractIntent.body.data)).body.data.outcome, 'SUCCEEDED');
-  const active = await request(`/membership-contracts/${contract.body.data.id}`, 'GET', undefined, alice.accessToken);
-  assert.deepEqual([active.body.data.status, active.body.data.remaining_credits], ['ACTIVE', 5]);
-
-  const center = await request('/academy/centers', 'POST', { branchId, name: `Center ${runId}`, description: '' }, owner.accessToken);
-  const course = await request('/academy/courses', 'POST', { centerId: center.body.data.id, sportId: demoIds.sport, name: 'Paid course', description: '' }, owner.accessToken);
-  const start = new Date(Date.now() + 5 * 86400000), end = new Date(start.getTime() + 7200000);
-  const cls = await request('/academy/classes', 'POST', { courseId: course.body.data.id, startsAt: start.toISOString(), endsAt: end.toISOString(), capacity: 1, price: 400000 }, owner.accessToken);
-  assert.equal(cls.status, 201, JSON.stringify(cls.body));
-  const enrollment = await request(`/academy/classes/${cls.body.data.id}/enrollments`, 'POST', undefined, alice.accessToken, key());
-  assert.equal(enrollment.body.data.status, 'PENDING_PAYMENT');
-  // The single seat is held while Alice pays.
-  assert.equal((await request(`/academy/classes/${cls.body.data.id}/enrollments`, 'POST', undefined, bob.accessToken, key())).body.error.code, 'CLASS_FULL');
-  const enrollmentIntent = await request('/payment-intents', 'POST', { enrollmentId: enrollment.body.data.id }, alice.accessToken, key());
-  assert.equal((await sandboxPay(enrollmentIntent.body.data)).body.data.outcome, 'SUCCEEDED');
-  assert.equal((await pool.query('SELECT status FROM academy.enrollments WHERE id=$1', [enrollment.body.data.id])).rows[0].status, 'ENROLLED');
-  const dropped = await request(`/academy/enrollments/${enrollment.body.data.id}`, 'DELETE', undefined, alice.accessToken);
-  assert.deepEqual([dropped.body.data.status, dropped.body.data.refund.amount, dropped.body.data.refund.status], ['CANCELLED', 400000, 'SUCCEEDED']);
-
-  const event = await request('/events', 'POST', { branchId, title: 'Paid event', description: '', startsAt: start.toISOString(), endsAt: end.toISOString(),
-    capacity: 5, ticketPrice: 90000 }, owner.accessToken);
-  assert.equal(event.status, 201, JSON.stringify(event.body));
-  const ticket = await request(`/events/${event.body.data.id}/tickets`, 'POST', {}, alice.accessToken, key());
-  assert.deepEqual([ticket.body.data.status, ticket.body.data.qrToken], ['PENDING_PAYMENT', null]);
-  const ticketIntent = await request('/payment-intents', 'POST', { ticketId: ticket.body.data.id }, alice.accessToken, key());
-  assert.equal((await sandboxPay(ticketIntent.body.data)).body.data.outcome, 'SUCCEEDED');
-  const tickets = await request('/users/me/tickets', 'GET', undefined, alice.accessToken);
-  const paid = tickets.body.data.find((row: any) => row.id === ticket.body.data.id);
-  assert.equal(paid.status, 'VALID');
-  assert.match(paid.qrToken, /^[0-9a-f-]{36}\.[0-9a-f]{64}$/);
+test('events, courses and membership plans are gone: their routes are 404 and an intent pays for a booking or an order only', async () => {
+  for (const [method, path] of [['GET', '/events'], ['GET', '/users/me/tickets'], ['POST', '/teams'], ['GET', '/academy/courses'], ['GET', '/users/me/class-sessions'],
+    ['GET', '/public/membership-plans'], ['GET', '/users/me/membership-contracts']]) {
+    const gone = await request(path, method, undefined, alice.accessToken);
+    assert.deepEqual([gone.status, gone.body.error?.code], [404, 'NOT_FOUND'], `${method} ${path}`);
+  }
+  assert.deepEqual(Object.keys(buildOpenApi(app).paths).filter(path => /\/(events|tickets|teams|matches|academy|membership-\w+|class-sessions)\b/.test(path)), []);
+  const features = (await request('/public/config')).body.data.features;
+  assert.deepEqual(Object.keys(features).filter(flag => /membership|academy|class|event|ticket/i.test(flag)), []);
+  // Neither the request nor the table accepts a membership contract, a class enrollment or an event ticket as the thing paid for.
+  for (const target of ['contractId', 'enrollmentId', 'ticketId']) {
+    const refused = await request('/payment-intents', 'POST', { [target]: randomUUID() }, alice.accessToken, key());
+    assert.deepEqual([refused.status, refused.body.error.code], [400, 'VALIDATION_FAILED'], target);
+  }
+  const none = await request('/payment-intents', 'POST', {}, alice.accessToken, key());
+  assert.deepEqual([none.status, none.body.error.code, none.body.error.message], [400, 'INVALID_PAYMENT_TARGET', 'Specify exactly one of bookingId or orderId']);
+  const columns = (await pool.query("SELECT column_name FROM information_schema.columns WHERE table_schema='payment' AND table_name='intents'")).rows.map(row => row.column_name);
+  assert.deepEqual(columns.filter(name => name.endsWith('_id')).sort(), ['booking_id', 'order_id', 'user_id']);
+  await assert.rejects(pool.query(`INSERT INTO payment.intents(user_id,provider,amount,currency,expires_at)
+    VALUES($1,'sandbox',1000,'VND',now()+interval '15 minutes')`, [alice.user.id]), (error: any) => error.constraint === 'intent_exactly_one_target');
+  assert.deepEqual((await pool.query("SELECT nspname FROM pg_namespace WHERE nspname IN ('membership','academy','social')")).rows, []);
 });
 
 test('payment that arrives after the deadline goes to review and an admin refunds it', async () => {

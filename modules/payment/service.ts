@@ -2,19 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { Database, DbClient } from '../../packages/database';
 import { Idempotency } from '../../packages/idempotency';
 import { emitEvent } from '../../packages/events';
-import { digest } from '../../packages/auth/crypto';
+import { digest, secureEqual } from '../../packages/auth/crypto';
 import { loadConfig } from '../../packages/config';
 import { ApiError, invariant } from '../../packages/contracts/errors';
 import { BookingService } from '../booking/service';
 import { CommerceService } from '../commerce/service';
-import { MembershipService } from '../membership/service';
-import { AcademyService } from '../academy/service';
-import { SocialService } from '../social/service';
 import { IntentDto, SandboxWebhookDto } from './dto';
 import { verifyWebhook } from './signature';
 import { createCheckout, payosWebhook, ProviderPayment, vnpayIpn } from './providers';
 
-const TARGETS = { bookingId: 'booking_id', orderId: 'order_id', contractId: 'contract_id', enrollmentId: 'enrollment_id', ticketId: 'ticket_id' } as const;
+const TARGETS = { bookingId: 'booking_id', orderId: 'order_id' } as const;
 type TargetColumn = typeof TARGETS[keyof typeof TARGETS];
 /** A payable thing: lock it, confirm it on payment, or close it when the money arrives too late. */
 interface Target {
@@ -28,8 +25,7 @@ interface Target {
 export class PaymentService {
   private readonly targets: Record<TargetColumn, Target>;
   constructor(private readonly db: Database, private readonly idem: Idempotency,
-    private readonly bookings: BookingService, private readonly commerce: CommerceService,
-    private readonly memberships: MembershipService, private readonly academy: AcademyService, private readonly social: SocialService) {
+    private readonly bookings: BookingService, private readonly commerce: CommerceService) {
     this.targets = {
       booking_id: { label: 'Dat san', owned: (u, id, tx) => bookings.get(u, id, tx), lock: (tx, id) => bookings.lock(tx, id),
         confirm: (tx, row, r) => bookings.confirm(tx, row, r),
@@ -37,18 +33,12 @@ export class PaymentService {
           await tx.query('UPDATE booking.reservations SET active=false WHERE booking_id=$1', [row.id]); } },
       order_id: { label: 'Don hang', owned: (u, id, tx) => commerce.get(u, id, tx), lock: (tx, id) => commerce.lock(tx, id),
         confirm: (tx, row, r) => commerce.confirm(tx, row, r),
-        expireLate: (tx, row, r) => commerce.transition(tx, row, 'EXPIRED', 'payment received after deadline', undefined, r) },
-      contract_id: { label: 'Goi thanh vien', owned: (u, id, tx) => memberships.get(u, id, tx), lock: (tx, id) => memberships.lock(tx, id),
-        confirm: (tx, row, r) => memberships.confirmPaid(tx, row, r), expireLate: (tx, row) => memberships.expire(tx, row) },
-      enrollment_id: { label: 'Hoc phi', owned: (u, id, tx) => academy.enrollment(u, id, tx), lock: (tx, id) => academy.lock(tx, id),
-        confirm: (tx, row, r) => academy.confirmPaid(tx, row, r), expireLate: (tx, row) => academy.expire(tx, row) },
-      ticket_id: { label: 'Ve su kien', owned: (u, id, tx) => social.ticket(u, id, tx), lock: (tx, id) => social.lock(tx, id),
-        confirm: (tx, row, r) => social.confirmPaid(tx, row, r), expireLate: (tx, row) => social.expire(tx, row) }
+        expireLate: (tx, row, r) => commerce.transition(tx, row, 'EXPIRED', 'payment received after deadline', undefined, r) }
     };
   }
   private resolve(dto: IntentDto) {
     const given = (Object.keys(TARGETS) as (keyof typeof TARGETS)[]).filter(key => dto[key]);
-    invariant(given.length === 1, 'INVALID_PAYMENT_TARGET', 'Specify exactly one of bookingId, orderId, contractId, enrollmentId or ticketId', 400);
+    invariant(given.length === 1, 'INVALID_PAYMENT_TARGET', 'Specify exactly one of bookingId or orderId', 400);
     return { column: TARGETS[given[0]], id: dto[given[0]]! };
   }
   private view(intent: any) {
@@ -99,15 +89,14 @@ export class PaymentService {
       if (intent.status !== 'SUCCEEDED' && intent.status !== 'NEEDS_REVIEW') {
         const confirmed = await target.confirm(tx, subject, requestId);
         if (!confirmed && subject.status === 'PENDING_PAYMENT' && subject.payment_expires_at.getTime() <= Date.now()) await target.expireLate(tx, subject, requestId);
-        // A late payment cannot take a slot or seat now held by another client. It goes to review and refund.
+        // A late payment cannot take a slot now held by another client. It goes to review and refund.
         outcome = confirmed ? 'SUCCEEDED' : 'NEEDS_REVIEW';
         await tx.query('UPDATE payment.intents SET status=$2,updated_at=now(),version=version+1 WHERE id=$1', [intent.id, outcome]);
         await tx.query(`INSERT INTO payment.transactions(intent_id,event_id,amount,currency,provider_ref,provider_paid_at)
           VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(intent_id) DO NOTHING`,
           [intent.id, payment.eventId, payment.amount, payment.currency, payment.providerRef || null, payment.paidAt || null]);
         await emitEvent(tx, intent.user_id, `payment.${outcome.toLowerCase()}`, { paymentIntentId: intent.id, bookingId: intent.booking_id || undefined,
-          orderId: intent.order_id || undefined, contractId: intent.contract_id || undefined, enrollmentId: intent.enrollment_id || undefined,
-          ticketId: intent.ticket_id || undefined, status: outcome }, requestId);
+          orderId: intent.order_id || undefined, status: outcome }, requestId);
       }
       await tx.query('INSERT INTO payment.webhook_events(provider,event_id,raw_hash,intent_id,outcome) VALUES($1,$2,$3,$4,$5)',
         [provider, payment.eventId, rawHash, intent.id, outcome]);
@@ -123,6 +112,20 @@ export class PaymentService {
     verifyWebhook(raw, timestamp, signature, loadConfig().webhookSecret);
     return this.settle('sandbox', { eventId: dto.eventId, orderCode: '', amount: dto.amount, currency: dto.currency, paid: true },
       digest(raw!), { sql: 'id', value: dto.intentId }, requestId);
+  }
+  /**
+   * Development stand-in for the sandbox provider's signed webhook, so a locally run app can finish a payment.
+   * Gated like the development OTP endpoint: never in production, only for sandbox, only with the development key.
+   */
+  async developmentPay(userId: string, intentId: string, key: string | undefined, requestId: string) {
+    const config = loadConfig();
+    invariant(!config.production && config.paymentProvider === 'sandbox' && config.devKey.length >= 32, 'NOT_FOUND', 'Not found', 404);
+    invariant(key && secureEqual(key, config.devKey), 'FORBIDDEN', 'Invalid development key', 403);
+    const intent = await this.get(userId, intentId), eventId = `development:${intentId}`;
+    // An expired intent would be filed as a late payment awaiting refund, for money that was never taken.
+    invariant(intent.status === 'CREATED' || intent.status === 'SUCCEEDED', 'TARGET_NOT_PAYABLE', 'This item cannot be paid');
+    return this.settle('sandbox', { eventId, orderCode: '', amount: intent.amount, currency: intent.currency, paid: true },
+      digest(eventId), { sql: 'id', value: intentId }, requestId);
   }
   /** PayOS posts JSON signed over `data`. Non-payment notifications and its webhook-URL probe are acknowledged without effect. */
   async payos(body: unknown, raw: Buffer | undefined, requestId: string) {
@@ -153,6 +156,5 @@ export class PaymentService {
   }
   async expireDue() {
     await this.db.query("UPDATE payment.intents SET status='EXPIRED',updated_at=now(),version=version+1 WHERE status='CREATED' AND expires_at<=now()");
-    await this.memberships.expireDue(); await this.academy.expireDue(); await this.social.expireDue();
   }
 }

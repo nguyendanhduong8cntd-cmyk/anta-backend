@@ -8,8 +8,11 @@ import { ApiError, invariant } from '../../packages/contracts/errors';
 import { checkPassword, digest, hashPassword, keyedDigest, secureEqual, token } from '../../packages/auth/crypto';
 import { signAccess, Principal } from '../../packages/auth/tokens';
 import { DeleteAccountDto, LoginDto, OtpSendDto, RegisterDto, ResetDto } from './dto';
-import { verifiedGoogleIdentity } from './firebase';
+import { verifiedGoogleIdentity } from './google';
 import { deliverOtp, OtpTransports, transportsFor } from './delivery';
+/** The account as its owner sees it. `passwordLogin` is false for an account that only signs in with Google. */
+const profileOf = (row: any) => ({ id: row.id, identifier: row.identifier, displayName: row.display_name,
+  passwordLogin: row.password_login_enabled, createdAt: row.created_at, version: row.version });
 export function normalizeIdentifier(value: string) {
   const identifier = value.trim().toLowerCase();
   invariant(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier) || /^\+[1-9]\d{7,14}$/.test(identifier),
@@ -152,9 +155,9 @@ export class IdentityService {
     return { accepted: true };
   }
   async profile(userId: string) {
-    const row = (await this.db.query('SELECT id,identifier,display_name,created_at,version FROM identity.users WHERE id=$1', [userId])).rows[0];
+    const row = (await this.db.query('SELECT id,identifier,display_name,password_login_enabled,created_at,version FROM identity.users WHERE id=$1', [userId])).rows[0];
     invariant(row, 'NOT_FOUND', 'User not found', 404);
-    return { id: row.id, identifier: row.identifier, displayName: row.display_name, createdAt: row.created_at, version: row.version };
+    return profileOf(row);
   }
   async updateProfile(userId: string, displayName?: string) {
     if (displayName !== undefined) {
@@ -172,7 +175,8 @@ export class IdentityService {
     await this.db.query('DELETE FROM identity.devices WHERE user_id=$1 AND device_id=$2', [userId, deviceId]);
     return { removed: true };
   }
-  async social(idToken: string, deviceId: string) {
+  async social(idToken: string, deviceId: string, ip: string) {
+    await this.redis.rateLimit(`social:ip:${digest(ip)}`, 30, 60000);
     const identity = await verifiedGoogleIdentity(idToken);
     return this.db.transaction(async tx => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`social:${identity.provider}:${identity.subject}`]);
@@ -187,19 +191,30 @@ export class IdentityService {
         invariant(!collision.rowCount, 'ACCOUNT_LINK_REQUIRED', 'Sign in to the existing account before linking Google', 409);
         const passwordHash = await hashPassword(token());
         userId = (await tx.query(`INSERT INTO identity.users(identifier,display_name,password_hash,password_login_enabled)
-          VALUES($1,$2,$3,false) RETURNING id`, [identity.email, identity.email.split('@')[0], passwordHash])).rows[0].id;
+          VALUES($1,$2,$3,false) RETURNING id`, [identity.email, identity.name || identity.email.split('@')[0], passwordHash])).rows[0].id;
         await tx.query('INSERT INTO identity.linked_accounts(user_id,provider,provider_subject) VALUES($1,$2,$3)',
           [userId, identity.provider, identity.subject]);
       }
-      const user = (await tx.query('SELECT id,identifier,display_name,created_at,version FROM identity.users WHERE id=$1', [userId])).rows[0];
-      return { user: { id: user.id, identifier: user.identifier, displayName: user.display_name,
-        createdAt: user.created_at, version: user.version }, ...await this.newSession(tx, userId, deviceId) };
+      const user = (await tx.query('SELECT id,identifier,display_name,password_login_enabled,created_at,version FROM identity.users WHERE id=$1', [userId])).rows[0];
+      return { user: profileOf(user), ...await this.newSession(tx, userId, deviceId) };
     });
   }
   async linkedAccounts(userId: string) {
     return (await this.db.query('SELECT id,provider,created_at FROM identity.linked_accounts WHERE user_id=$1 ORDER BY created_at', [userId])).rows;
   }
-  async linkAccount(userId: string, idToken: string) {
+  /**
+   * The caller has typed the account's password again. A way to sign in is only added or removed on this proof:
+   * an access token alone, stolen or left on an unlocked phone, must not be enough to plant one.
+   */
+  private async passwordProof(userId: string, password: string) {
+    const user = (await this.db.query('SELECT password_hash,password_login_enabled FROM identity.users WHERE id=$1', [userId])).rows[0];
+    const valid = await checkPassword(password, user?.password_hash || await this.dummyHash);
+    invariant(user?.password_login_enabled && valid, 'INVALID_CREDENTIALS', 'Password re-authentication is required', 401);
+    return user;
+  }
+  async linkAccount(userId: string, idToken: string, password: string) {
+    await this.redis.rateLimit(`reauth:${userId}`, 10, 3600000);
+    await this.passwordProof(userId, password);
     const identity = await verifiedGoogleIdentity(idToken);
     return this.db.transaction(async tx => {
       await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`social:${identity.provider}:${identity.subject}`]);
@@ -214,7 +229,9 @@ export class IdentityService {
       return { id: row.id, provider: identity.provider, linked: true };
     });
   }
-  async unlinkAccount(userId: string, id: string) {
+  async unlinkAccount(userId: string, id: string, password: string) {
+    await this.redis.rateLimit(`reauth:${userId}`, 10, 3600000);
+    await this.passwordProof(userId, password);
     return this.db.transaction(async tx => {
       const user = (await tx.query('SELECT password_login_enabled FROM identity.users WHERE id=$1 FOR UPDATE', [userId])).rows[0];
       const linked = (await tx.query('SELECT id FROM identity.linked_accounts WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
@@ -227,15 +244,13 @@ export class IdentityService {
   }
   async requestDeletion(userId: string, proof: DeleteAccountDto, requestId?: string) {
     await this.redis.rateLimit(`delete:account:${userId}`, 5, 3600000);
-    invariant(Boolean(proof.password) !== Boolean(proof.firebaseIdToken), 'INVALID_REAUTH', 'Provide exactly one re-authentication method', 400);
-    const user = (await this.db.query('SELECT password_hash,password_login_enabled FROM identity.users WHERE id=$1', [userId])).rows[0];
-    let socialIdentity: Awaited<ReturnType<typeof verifiedGoogleIdentity>> | undefined;
-    if (proof.password) {
-      const valid = await checkPassword(proof.password, user?.password_hash || await this.dummyHash);
-      invariant(user?.password_login_enabled && valid, 'INVALID_CREDENTIALS', 'Password re-authentication is required', 401);
-    } else {
-      socialIdentity = await verifiedGoogleIdentity(proof.firebaseIdToken!);
-      const age = Date.now() / 1000 - socialIdentity.authTime;
+    invariant(Boolean(proof.password) !== Boolean(proof.idToken), 'INVALID_REAUTH', 'Provide exactly one re-authentication method', 400);
+    let user, socialIdentity: Awaited<ReturnType<typeof verifiedGoogleIdentity>> | undefined;
+    if (proof.password) user = await this.passwordProof(userId, proof.password);
+    else {
+      user = (await this.db.query('SELECT password_hash FROM identity.users WHERE id=$1', [userId])).rows[0];
+      socialIdentity = await verifiedGoogleIdentity(proof.idToken!);
+      const age = Date.now() / 1000 - socialIdentity.issuedAt;
       invariant(Number.isFinite(age) && age >= -60 && age <= 300,
         'REAUTH_REQUIRED', 'Sign in to Google again before deleting the account', 401);
       const linked = await this.db.query('SELECT 1 FROM identity.linked_accounts WHERE user_id=$1 AND provider=$2 AND provider_subject=$3',
@@ -305,7 +320,6 @@ export class IdentityService {
       await run('idempotencyKeys', 'DELETE FROM platform.idempotency WHERE user_id=$1');
       await run('bookingInvitations', 'DELETE FROM booking.participants WHERE user_id=$1');
       await run('reviewComments', "UPDATE booking.reviews SET comment='' WHERE user_id=$1 AND comment<>''");
-      await run('teamMemberships', 'DELETE FROM social.team_members m USING social.teams t WHERE m.team_id=t.id AND m.user_id=$1 AND t.owner_id<>$1');
       await run('chatEnvelopes', 'DELETE FROM chat.message_envelopes e USING chat.messages m WHERE e.message_id=m.id AND (e.recipient_id=$1 OR m.sender_id=$1)');
       await run('chatMessages', "UPDATE chat.messages SET body='',deleted_at=coalesce(deleted_at,now()) WHERE sender_id=$1 AND (body<>'' OR deleted_at IS NULL)");
       await run('chatMemberships', "UPDATE chat.members SET status='LEFT' WHERE user_id=$1 AND status<>'LEFT'");

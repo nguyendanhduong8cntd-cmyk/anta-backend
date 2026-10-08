@@ -14,6 +14,9 @@ export class PaymentController {
     return this.payments.create(user.userId, dto, key, req.ip);
   }
   @ApiBearerAuth() @Get('payment-intents/:id') get(@CurrentUser() user: Principal, @Param('id', new ParseUUIDPipe({ version: '4' })) id: string) { return this.payments.get(user.userId, id); }
+  @ApiBearerAuth() @Post('dev/payment-intents/:id/pay') @HttpCode(200) @ApiHeader({ name: 'X-Dev-Key', required: true })
+  developmentPay(@CurrentUser() user: Principal, @Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Req() req: AuthRequest,
+    @Headers('x-dev-key') key?: string) { return this.payments.developmentPay(user.userId, id, key, req.requestId); }
   @ApiBearerAuth() @Get('users/me/refunds') myRefunds(@CurrentUser() user: Principal) { return this.refunds.mine(user.userId); }
   // Provider callbacks authenticate by signature, never by user session. Static routes must precede `:provider`.
   @Public() @Post('webhooks/payments/payos') @HttpCode(200)

@@ -2,13 +2,15 @@
 
 > Quyết định triển khai mới: chuyển backend clone sang **Python/FastAPI** theo từng module. Giữ PostgreSQL/PostGIS, Redis, R2 và API contract; FastAPI chạy song song trên cổng 8000 trong thời gian chuyển đổi. Tài liệu gốc bên dưới vẫn mô tả ranh giới nghiệp vụ và bản NestJS tham chiếu, không có nghĩa là bản FastAPI đã đạt đầy đủ parity. Theo dõi tiến độ trong [python_backend/README.md](../python_backend/README.md).
 
+> Phạm vi sản phẩm (08/10/2026): bản clone không có sự kiện, khoá học và gói hội viên. Mục 1 và 2 vẫn nhắc các miền đó vì mô tả app gốc và bằng chứng từ APK; thiết kế của backend clone (từ mục 3) không còn ba phần này.
+
 ## 1. Kết luận kiến trúc
 
 Không nên dựng backend này như một CRUD đơn giản. APK gốc cho thấy sản phẩm là một nền tảng đặt sân thể thao đa chi nhánh, có booking thời gian thực, membership, học viện, sự kiện xã hội, đội/ghép trận, dịch vụ bán thêm, nhiều cổng thanh toán, thông báo và chat.
 
 Kiến trúc phù hợp cho giai đoạn clone là:
 
-- Một **modular monolith** làm nguồn dữ liệu chính cho identity, catalog, booking, membership, academy, social và sales.
+- Một **modular monolith** làm nguồn dữ liệu chính cho identity, catalog, booking và sales.
 - Một tiến trình **realtime gateway** riêng cho Socket.IO/chat và SSE trạng thái thanh toán.
 - Một tiến trình **worker** riêng cho webhook, FCM, email, hết hạn giữ chỗ, đồng bộ media và các tác vụ nền.
 - PostgreSQL + PostGIS là nguồn dữ liệu chuẩn; Redis dùng cho cache, distributed lock, idempotency và hàng đợi; object storage dùng cho ảnh, audio, hóa đơn và QR.
@@ -98,9 +100,6 @@ Nguyên tắc sở hữu dữ liệu: client không gọi trực tiếp database
 | Catalog/Geo | Sport, shop, branch, yard, bảng giá, giờ mở cửa, dịch vụ, ảnh, rule, tìm kiếm PostGIS |
 | Availability | Sinh slot, kiểm tra lịch bận, giữ chỗ có TTL, giá theo ngày/giờ, khóa cạnh tranh |
 | Booking | One-time/recurring/social booking, participant, lifecycle, cancel, pass yard, review |
-| Social/Team | Event, matching, ticket, team, friend, invitation và QR join |
-| Membership | Plan, contract, usage, debt, membership ticket, discount và renewal |
-| Academy | Center, coach, course, class, session, enrollment, tuition, student và attendance |
 | Sales/Service | Request order, service order, add-on, order lifecycle và shop fulfillment |
 | Voucher/Pricing | Điều kiện áp dụng, quota, rank, time range, yard type, quote và discount |
 | Payment | Payment intent, provider adapter, transaction, QR, receipt, refund và webhook |
@@ -121,9 +120,6 @@ Các bảng nên chia schema theo module nhưng dùng chung một PostgreSQL tro
 | Catalog | `sports`, `shops`, `branches`, `yards`, `yard_sport_types`, `opening_hours`, `price_rules`, `services`, `branch_media`, `branch_rules` |
 | Geo | `provinces`, `wards`, `branch_locations`, `user_favorite_locations`; cột vị trí dùng `geography(Point,4326)` |
 | Booking | `booking_holds`, `bookings`, `booking_occurrences`, `booking_slots`, `booking_participants`, `booking_services`, `booking_status_history`, `reviews` |
-| Social | `events`, `matches`, `tickets`, `ticket_members`, `teams`, `team_members`, `invitations`, `friendships` |
-| Membership | `membership_plans`, `membership_contracts`, `membership_usages`, `membership_usage_logs`, `membership_tickets` |
-| Academy | `centers`, `coaches`, `courses`, `classes`, `class_sessions`, `students`, `enrollments`, `attendance`, `tuition_plans` |
 | Commerce | `orders`, `order_items`, `service_requests`, `vouchers`, `voucher_conditions`, `voucher_redemptions` |
 | Payment | `payment_intents`, `payment_transactions`, `payment_attempts`, `payment_receipts`, `refunds`, `provider_webhook_events` |
 | Notification | `notifications`, `notification_preferences`, `campaigns`, `outbox_events` |
@@ -181,16 +177,6 @@ Nhóm endpoint tối thiểu:
 - `POST|DELETE /api/v1/bookings/{bookingId}/participants`.
 - `POST /api/v1/bookings/{bookingId}/services`.
 - `POST /api/v1/bookings/{bookingId}/reviews`.
-- `GET /api/v1/branches/{branchId}/events`.
-
-### Membership, academy và social
-
-- CRUD đọc/đăng ký cho `membership-plans`, `membership-contracts`, `membership-usages`.
-- `GET /api/v1/academy/centers|coaches|courses|classes` và endpoint detail.
-- `POST /api/v1/academy/classes/{classId}/enrollments`.
-- `GET /api/v1/users/me/class-sessions`.
-- CRUD có kiểm soát cho `events`, `tickets`, `teams`, `invitations` và `matches`.
-- `POST /api/v1/tickets/{ticketId}/buy-with-membership`.
 
 ### Order, voucher và payment
 
@@ -250,8 +236,8 @@ Các invariant bắt buộc:
 ## 8. Realtime, notification và offline
 
 - Socket.IO dùng cho chat, typing/presence, unread count và message acknowledgement. JWT cho handshake; reconnect dùng cursor/message sequence thay vì dựa vào thời gian thiết bị.
-- SSE dùng cho trạng thái payment membership/enrollment để bám hành vi app gốc. Endpoint hỗ trợ `Last-Event-ID`, heartbeat, retry backoff và resume.
-- FCM dùng cho trạng thái cần đến khi app background: booking confirmed/cancelled, payment, invitation, class reminder và chat notification.
+- SSE dùng cho trạng thái payment để bám hành vi app gốc. Endpoint hỗ trợ `Last-Event-ID`, heartbeat, retry backoff và resume.
+- FCM dùng cho trạng thái cần đến khi app background: booking confirmed/cancelled, payment, invitation và chat notification.
 - Android cache dữ liệu đọc bằng Room/SQLite. Queue ghi offline chỉ dùng cho thao tác idempotent như mark-read/favorite; không queue ngầm booking hoặc payment.
 - Outbox pattern bảo đảm transaction nghiệp vụ và event gửi worker không bị lệch trạng thái.
 
@@ -259,7 +245,7 @@ Các invariant bắt buộc:
 
 - Access token 10-15 phút; refresh token xoay vòng, hash trong database và revoke theo device/session.
 - OTP có TTL, giới hạn lần thử, cooldown, rate limit theo account/IP/device và chống user enumeration.
-- RBAC theo `user`, `branch_staff`, `branch_owner`, `coach`, `support`, `admin`; mọi truy vấn phải kiểm tra tenant ownership.
+- RBAC theo `user`, `branch_staff`, `branch_owner`, `support`, `admin`; mọi truy vấn phải kiểm tra tenant ownership.
 - Webhook payment xác minh signature/timestamp, lưu raw event hash để dedupe và chạy reconciliation định kỳ.
 - Upload dùng presigned URL, allowlist MIME/size, quét malware và tách bucket public/private.
 - Mã hóa PII và payment receipt khi lưu; secret nằm trong secret manager, không nằm trong APK hay Git.
@@ -298,9 +284,6 @@ backend/
 │  ├─ identity/
 │  ├─ catalog/
 │  ├─ booking/
-│  ├─ membership/
-│  ├─ academy/
-│  ├─ social/
 │  ├─ commerce/
 │  ├─ payment/
 │  ├─ notification/
@@ -339,10 +322,10 @@ Mỗi module có `domain`, `application`, `infrastructure`, `http` và test. Kh�
 
 ### Phase 2 - Parity nghiệp vụ
 
-1. Booking định kỳ, social event/match, ticket, team/invitation và QR.
-2. Membership/voucher/rank/favorite.
+1. Booking định kỳ.
+2. Voucher/rank/favorite.
 3. Service order, receipt upload và các provider thanh toán còn lại.
-4. Academy/course/class/enrollment/session/attendance và SSE payment.
+4. SSE payment.
 
 ### Phase 3 - Realtime và vận hành đầy đủ
 

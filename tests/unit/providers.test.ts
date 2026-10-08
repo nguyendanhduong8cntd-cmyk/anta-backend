@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { loadConfig } from '../../packages/config';
 import { payosCheckout, payosSign, payosSignatureText, payosWebhook, vnpayCheckout, vnpayDate, vnpayIpn, vnpayQuery, vnpayRefund, vnpaySign } from '../../modules/payment/providers';
-import { bookingRefundPercent, classRefundPercent, orderRefundPercent, refundAmount } from '../../modules/payment/refunds';
+import { bookingRefundPercent, orderRefundPercent, refundAmount } from '../../modules/payment/refunds';
 import { channelOf, deliverOtp, otpText, twilioTransport } from '../../modules/identity/delivery';
 const secret = 'unit-test-secret-with-more-than-32-characters';
 const env = { DATABASE_URL: 'postgresql://localhost/x', REDIS_URL: 'redis://localhost', JWT_SECRET: secret, OTP_HASH_SECRET: secret,
@@ -86,7 +86,6 @@ test('refund policy: full, partial, closed', () => {
   assert.deepEqual([bookingRefundPercent(at(48), now, policy), bookingRefundPercent(at(24), now, policy), bookingRefundPercent(at(23.9), now, policy),
     bookingRefundPercent(at(2), now, policy), bookingRefundPercent(at(1.9), now, policy), bookingRefundPercent(at(-1), now, policy)], [100, 100, 50, 50, 0, 0]);
   assert.deepEqual([orderRefundPercent(at(-1), now, policy), orderRefundPercent(at(-25), now, policy)], [100, 0]);
-  assert.deepEqual([classRefundPercent(at(30), now, policy), classRefundPercent(at(3), now, policy)], [100, 0]);
   assert.deepEqual([refundAmount(180000, 100), refundAmount(180001, 50), refundAmount(1, 50)], [180000, 90000, 0]);
 });
 

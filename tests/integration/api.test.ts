@@ -7,6 +7,7 @@ import { Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { createApplication } from '../../apps/api/bootstrap';
 import { Database } from '../../packages/database';
+import { RedisService } from '../../packages/redis';
 import { BookingService } from '../../modules/booking/service';
 import { PaymentService } from '../../modules/payment/service';
 import { signWebhook } from '../../modules/payment/signature';
@@ -19,6 +20,8 @@ import { buildOpenApi } from '../../packages/contracts/openapi';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { createRealtime } from '../../apps/realtime/main';
 import { AddressInfo } from 'node:net';
+import { createServer } from 'node:http';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { io } from 'socket.io-client';
 
 // Never run integration fixtures in the application's database.
@@ -28,6 +31,8 @@ process.env.NODE_ENV = 'test';
 process.env.DEV_OTP_ENABLED = 'true';
 process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';
+// Google sign-in is off unless a test turns it on, whatever the developer's .env holds.
+for (const key of ['GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL']) delete process.env[key];
 let app: INestApplication, base: string, db: Database;
 const runId = randomUUID().slice(0, 8);
 const demoIds = { ...seedIds, branch: randomUUID(), yard: randomUUID() };
@@ -92,6 +97,18 @@ test('health, OpenAPI contract, envelope, validation and PostGIS search', async 
   assert.equal((await request('/users/me')).status, 401);
   const nearby = await request('/public/branches?lat=10.762622&lng=106.660172&radius=1000&pageSize=100');
   assert.equal(nearby.status, 200); assert.ok(nearby.body.data.items.some((b: any) => b.id === demoIds.branch));
+  // List cards show opening hours, and the nearest venues can be asked for nationwide.
+  const listed = nearby.body.data.items.find((b: any) => b.id === demoIds.branch);
+  assert.ok(Number.isInteger(listed.opening_hour) && listed.closing_hour > listed.opening_hour);
+  // A card also shows the sports on offer, the cheapest hourly price and the advertised rating (none for the demo venue).
+  assert.deepEqual([listed.sports, listed.min_price, listed.rating, listed.review_count], [[{ slug: 'badminton', name: 'Cầu lông' }], 180000, null, 0]);
+  assert.ok(sports.body.data.find((sport: any) => sport.slug === 'badminton').venue_count >= 2);
+  assert.equal((await request('/public/branches?sort=newest')).status, 400);
+  // Someone on the other side of the world still gets the nearest venues, however far those are.
+  const abroad = await request('/public/branches?lat=37.42&lng=-122.08&radius=20100000&pageSize=1');
+  assert.ok(abroad.body.data.items.length === 1 && abroad.body.data.items[0].distance_meters > 10000000);
+  assert.equal((await request('/public/branches?lat=37.42&lng=-122.08&radius=3000000')).body.data.total, 0);
+  assert.equal((await request('/public/branches?lat=21&lng=105&radius=20100001')).status, 400);
   const far = await request('/public/branches?lat=21&lng=105&radius=1000'); assert.equal(far.body.data.items.length, 0);
   assert.equal((await request('/public/branches?lat=10')).status, 400);
   assert.equal((await request('/public/branches?radius=-1')).status, 400);
@@ -107,6 +124,7 @@ test('imported venues are found under every sport they advertise and re-import u
   const slug = 'sport_integration_fixture', name = `Import fixture ${runId}`;
   // Da Nang, away from the coordinates the PostGIS search test counts on.
   const venue: Venue = { slug, name, address: '1 Bạch Đằng, Đà Nẵng', hours: '05:30 - 22:00', sports: ['Đa năng', 'Bóng rổ'], location: { lat: 16.0712, lng: 108.2241 },
+    rating: 4.96, reviewCount: 31, bookingUrl: 'https://example.test/san/sport_integration_fixture',
     priceTables: [{ group: 'Nguyên sân', name: 'Thuê 60 phút', rows: [{ days: 'T2 - CN', time: '6h - 22h', fixed: 300000, walkIn: 330000 }] },
       { group: 'Nguyên sân', name: 'Thuê 30 phút', rows: [{ days: 'T2 - CN', time: '6h - 22h', fixed: 200000, walkIn: 200000 }] }],
     services: [{ name: 'Nước suối', price: 10000, unit: 'chai' }, { name: 'Nước suối', price: 200000, unit: 'thùng' }] };
@@ -140,6 +158,34 @@ test('imported venues are found under every sport they advertise and re-import u
   assert.equal(detail.body.data.opening_hour, 6);
   assert.deepEqual(detail.body.data.yards.map((yard: any) => [yard.name, yard.hourly_price]), [['Nguyên sân', 330000]]);
   assert.match(detail.body.data.description, /Nguyên sân - Thuê 30 phút/);
+  assert.doesNotMatch(detail.body.data.description, /example\.test/);
+  assert.deepEqual([detail.body.data.rating, detail.body.data.review_count, detail.body.data.min_price], [5, 31, 330000]);
+  assert.deepEqual(detail.body.data.sports.map((sport: any) => sport.slug), ['basketball', 'multi-sport']);
+  // Typed without accents, a venue is found by its address or by a sport it offers.
+  const typed = async (text: string) => (await request(`/public/branches?q=${encodeURIComponent(text)}&pageSize=100`)).body.data.items.map((b: any) => b.name);
+  assert.ok((await typed('bach dang, da nang')).includes(name));
+  assert.ok((await typed('BONG RO')).includes(name));
+  assert.ok(!(await typed('cau long')).includes(name));
+  // LIKE's wildcards are ordinary characters when typed: "%" does not match every venue.
+  assert.ok(!(await typed('%')).includes(name));
+  assert.ok(!(await typed('B_ch Dang')).includes(name));
+  // Under a sport filter the price shown is that sport's, not the cheapest hour of any sport.
+  const fixtureId = detail.body.data.id, golfId = sports.find(sport => sport.slug === 'golf')!.id, cheapYard = randomUUID();
+  const priceUnder = async (sportSlug?: string) => (await request(`/public/branches?q=${encodeURIComponent(name)}` +
+    (sportSlug ? `&sportId=${sports.find(sport => sport.slug === sportSlug)!.id}` : ''))).body.data.items[0]?.min_price;
+  await db.query("INSERT INTO catalog.yards(id,branch_id,sport_id,name,hourly_price) VALUES($1,$2,$3,'Putting green',50000)", [cheapYard, fixtureId, golfId]);
+  try {
+    assert.deepEqual([await priceUnder(), await priceUnder('basketball'), await priceUnder('golf'), await priceUnder('multi-sport')], [50000, 330000, 50000, 50000]);
+  } finally { await db.query('DELETE FROM catalog.yards WHERE id=$1', [cheapYard]); }
+  // Best rated first: rated venues lead in falling order and unrated ones follow. Cheapest first: prices only rise.
+  const sorted = async (sort: string) => (await request(`/public/branches?sort=${sort}&pageSize=100`)).body.data.items as any[];
+  const byRating = await sorted('rating'), unrated = byRating.findIndex(b => b.rating === null), rated = byRating.slice(0, unrated < 0 ? undefined : unrated);
+  assert.ok(rated.some(b => b.id === detail.body.data.id));
+  assert.ok(byRating.slice(rated.length).every(b => b.rating === null));
+  assert.deepEqual(rated.map(b => b.rating), rated.map(b => b.rating).sort((a, b) => b - a));
+  const prices = (await sorted('price')).map(b => b.min_price).filter(price => price !== null);
+  assert.ok(prices.length > 1);
+  assert.deepEqual(prices, [...prices].sort((a, b) => a - b));
 });
 test('OTP failure attempts persist, consume once and development endpoint is protected', async () => {
   const sent = await request('/public/auth/otp/send', 'POST', { identifier: `${runId}-otp@example.com`, purpose: 'register' });
@@ -162,7 +208,7 @@ test('registration/login/profile/logout/refresh rotation and reuse revoke the fa
   const login = await request('/public/auth/login', 'POST', { identifier: user.identifier, password: 'test-password-long-123', deviceId: 'x' }); assert.equal(login.status, 201);
   assert.equal((await request('/auth/logout', 'POST', undefined, login.body.data.accessToken)).status, 201);
   assert.equal((await request('/users/me', 'GET', undefined, login.body.data.accessToken)).status, 401);
-  assert.equal((await request('/public/auth/social', 'POST', { firebaseIdToken: 'x'.repeat(100), deviceId: 'test-device' })).status, 503);
+  assert.equal((await request('/public/auth/social', 'POST', { idToken: 'x'.repeat(100), deviceId: 'test-device' })).status, 503);
 });
 test('parallel clients cannot hold the same slot; adjacent slots are allowed', async () => {
   const a = await account('race-a'), b = await account('race-b'), target = slot();
@@ -189,6 +235,35 @@ test('booking and payment retry return the same records; ownership and payload h
   assert.equal(payments[0].status, 201); assert.equal(payments[0].body.data.id, payments[1].body.data.id);
   assert.equal((await request(`/payment-intents/${payments[0].body.data.id}`, 'GET', undefined, b.accessToken)).status, 404);
   assert.equal((await request('/booking-holds', 'POST', slot(), a.accessToken)).status, 400);
+  // A booking lists with the venue and yard it is for.
+  const listed = (await request('/users/me/bookings', 'GET', undefined, a.accessToken)).body.data;
+  assert.deepEqual([listed.total, listed.items[0].id, listed.items[0].branch_name, listed.items[0].yard_name, listed.items[0].branch_timezone, listed.items[0].total],
+    [1, id, 'Sân cầu lông Demo', 'Sân 1', 'Asia/Ho_Chi_Minh', undefined]);
+  // The development payment needs a session, the development key, the intent's owner and the sandbox provider.
+  const devPay = `/dev/payment-intents/${payments[0].body.data.id}/pay`, devKey = { 'X-Dev-Key': process.env.DEV_ADMIN_KEY! };
+  assert.equal((await request(devPay, 'POST', undefined, undefined, devKey)).status, 401);
+  assert.equal((await request(devPay, 'POST', undefined, a.accessToken)).status, 403);
+  assert.equal((await request(devPay, 'POST', undefined, a.accessToken, { 'X-Dev-Key': 'x'.repeat(40) })).status, 403);
+  assert.equal((await request(devPay, 'POST', undefined, b.accessToken, devKey)).status, 404);
+  const provider = process.env.PAYMENT_PROVIDER;
+  try {
+    Object.assign(process.env, { PAYMENT_PROVIDER: 'vnpay', VNPAY_TMN_CODE: 'TESTCODE', VNPAY_HASH_SECRET: 'integration-vnpay-hash-secret', PAYMENT_RETURN_URL: 'https://example.test/return' });
+    assert.equal((await request(devPay, 'POST', undefined, a.accessToken, devKey)).status, 404);
+  } finally {
+    process.env.PAYMENT_PROVIDER = provider;
+    for (const name of ['VNPAY_TMN_CODE', 'VNPAY_HASH_SECRET', 'PAYMENT_RETURN_URL']) delete process.env[name];
+  }
+  assert.equal((await request(`/bookings/${id}`, 'GET', undefined, a.accessToken)).body.data.status, 'PENDING_PAYMENT');
+  const paid = await request(devPay, 'POST', undefined, a.accessToken, devKey);
+  assert.deepEqual([paid.status, paid.body.data.outcome, paid.body.data.duplicate], [200, 'SUCCEEDED', false]);
+  assert.equal((await request(devPay, 'POST', undefined, a.accessToken, devKey)).body.data.duplicate, true);
+  const confirmed = (await request(`/bookings/${id}`, 'GET', undefined, a.accessToken)).body.data;
+  assert.deepEqual([confirmed.status, confirmed.branch_name, confirmed.yard_name], ['CONFIRMED', 'Sân cầu lông Demo', 'Sân 1']);
+  // An intent that is no longer waiting is refused instead of being filed as a late payment.
+  await db.query("UPDATE payment.intents SET status='EXPIRED' WHERE id=$1", [payments[0].body.data.id]);
+  const late = await request(devPay, 'POST', undefined, a.accessToken, devKey);
+  assert.deepEqual([late.status, late.body.error.code], [409, 'TARGET_NOT_PAYABLE']);
+  await db.query("UPDATE payment.intents SET status='SUCCEEDED' WHERE id=$1", [payments[0].body.data.id]);
 });
 test('only signed webhook confirms; replay dedupe and amount checks preserve state', async () => {
   const user = await account('payment'), created = await booking(user.accessToken);
@@ -300,4 +375,89 @@ test('SSE replay and Socket.IO resume use durable user-scoped cursors', async ()
       invalid.once('connect_error', () => { clearTimeout(timer); resolve(); });
     }); } finally { invalid.disconnect(); }
   } finally { controller.abort(); socket?.disconnect(); await realtime.stop(); }
+});
+test('Google sign-in opens a passwordless account, favourites list like any venue list, and deletion needs a fresh Google proof', async () => {
+  // A stand-in for Google's key server: the backend fetches these keys exactly as it fetches Google's.
+  const { publicKey, privateKey } = await generateKeyPair('RS256');
+  const jwk = { ...await exportJWK(publicKey), kid: 'test-key', alg: 'RS256', use: 'sig' };
+  const google = createServer((_req, res) => res.setHeader('Content-Type', 'application/json').end(JSON.stringify({ keys: [jwk] })));
+  await new Promise<void>(resolve => google.listen(0, '127.0.0.1', resolve));
+  const client = '1234567890-tests.apps.googleusercontent.com', email = `${runId}-google@example.com`;
+  const now = () => Math.floor(Date.now() / 1000);
+  const idToken = (claims: Record<string, unknown> = {}) => new SignJWT({ iss: 'https://accounts.google.com', aud: client, sub: `google-${runId}`,
+    email, email_verified: true, name: 'Bình Google', iat: now(), exp: now() + 3600, ...claims }).setProtectedHeader({ alg: 'RS256', kid: 'test-key' }).sign(privateKey);
+  const signIn = async (claims: Record<string, unknown> = {}) => request('/public/auth/social', 'POST', { idToken: await idToken(claims), deviceId: 'test-device' });
+  // This test alone makes a quarter of the requests one address may make in a minute, at the end of a file that has
+  // made the rest: it starts from a clean count rather than depend on how fast the tests before it ran.
+  const redis = app.get(RedisService).client, prefix = process.env.REDIS_KEY_PREFIX!;
+  for (const counter of await redis.keys(`${prefix}http:ip:*`)) await redis.del(counter.slice(prefix.length));
+  process.env.GOOGLE_JWKS_URL = `http://127.0.0.1:${(google.address() as AddressInfo).port}/certs`;
+  process.env.GOOGLE_CLIENT_ID = client;
+  try {
+    const config = (await request('/public/config')).body.data;
+    assert.deepEqual([config.googleClientId, config.features.socialLogin], [client, true]);
+
+    const first = await signIn();
+    assert.equal(first.status, 201);
+    assert.deepEqual([first.body.data.user.identifier, first.body.data.user.displayName, first.body.data.user.passwordLogin], [email, 'Bình Google', false]);
+    const jwt = first.body.data.accessToken;
+    assert.equal((await request('/users/me', 'GET', undefined, jwt)).body.data.passwordLogin, false);
+    assert.equal((await request('/users/me', 'GET', undefined, anotherUser.accessToken)).body.data.passwordLogin, true);
+    // The same Google account is the same account here, whatever Google now calls its owner.
+    const again = await signIn({ name: 'Tên khác' });
+    assert.deepEqual([again.body.data.user.id, again.body.data.user.displayName], [first.body.data.user.id, 'Bình Google']);
+    // It has no password: the password door stays shut, and so does the Google door for anything Google did not sign for us.
+    assert.equal((await request('/public/auth/login', 'POST', { identifier: email, password: 'any-password-1234', deviceId: 'x' })).status, 401);
+    assert.equal((await signIn({ aud: 'someone-else.apps.googleusercontent.com' })).body.error.code, 'INVALID_SOCIAL_TOKEN');
+    assert.equal((await signIn({ email_verified: false })).body.error.code, 'UNSUPPORTED_SOCIAL_IDENTITY');
+    // An email that already has a password account is never taken over by a Google sign-in.
+    const collision = await signIn({ sub: `google-other-${runId}`, email: anotherUser.identifier });
+    assert.deepEqual([collision.status, collision.body.error.code], [409, 'ACCOUNT_LINK_REQUIRED']);
+
+    // Adding a way into a password account takes the password again: a borrowed session cannot plant one.
+    const linkedGoogle = { sub: `google-linked-${runId}`, email: `${runId}-linked@example.com` };
+    const link = async (body: object) => request('/users/me/linked-accounts', 'POST', { idToken: await idToken(linkedGoogle), ...body }, anotherUser.accessToken);
+    assert.equal((await link({})).status, 400);
+    assert.equal((await link({ password: 'not-the-password-1' })).body.error.code, 'INVALID_CREDENTIALS');
+    assert.deepEqual((await request('/users/me/linked-accounts', 'GET', undefined, anotherUser.accessToken)).body.data, []);
+    const linked = await link({ password: 'test-password-long-123' });
+    assert.equal(linked.status, 201);
+    assert.equal((await signIn(linkedGoogle)).body.data.user.id, anotherUser.user.id);
+    const unlink = async (body?: object) => request(`/users/me/linked-accounts/${linked.body.data.id}`, 'DELETE', body, anotherUser.accessToken);
+    assert.equal((await unlink()).status, 400);
+    assert.equal((await unlink({ password: 'not-the-password-1' })).body.error.code, 'INVALID_CREDENTIALS');
+    assert.equal((await unlink({ password: 'test-password-long-123' })).status, 200);
+    // Unlinked, that Google account is a stranger again and gets an account of its own.
+    assert.notEqual((await signIn(linkedGoogle)).body.data.user.id, anotherUser.user.id);
+
+    assert.equal((await request('/users/me/favorites')).status, 401);
+    assert.deepEqual((await request('/users/me/favorites', 'GET', undefined, jwt)).body.data, []);
+    assert.equal((await request(`/users/me/favorites/${demoIds.branch}`, 'POST', undefined, jwt)).status, 201);
+    assert.equal((await request(`/users/me/favorites/${demoIds.branch}`, 'POST', undefined, jwt)).status, 201);
+    assert.equal((await request(`/users/me/favorites/${randomUUID()}`, 'POST', undefined, jwt)).status, 404);
+    const favorites = (await request('/users/me/favorites', 'GET', undefined, jwt)).body.data;
+    const { name } = (await request(`/public/branches/${demoIds.branch}`)).body.data;
+    const listed = (await request(`/public/branches?pageSize=100&q=${encodeURIComponent(name)}`)).body.data.items.find((item: any) => item.id === demoIds.branch);
+    assert.ok(listed);
+    // A favourite carries what a venue card shows: the same fields as the public list, minus the distance.
+    const { distance_meters: _distance, ...card } = listed;
+    assert.deepEqual(favorites, [card]);
+    assert.deepEqual((await request('/users/me/favorites', 'GET', undefined, anotherUser.accessToken)).body.data, []);
+    assert.equal((await request(`/users/me/favorites/${demoIds.branch}`, 'DELETE', undefined, jwt)).status, 200);
+    assert.deepEqual((await request('/users/me/favorites', 'GET', undefined, jwt)).body.data, []);
+
+    const remove = async (body: unknown) => request('/users/me', 'DELETE', body, jwt);
+    assert.equal((await remove({ password: 'any-password-1234' })).body.error.code, 'INVALID_CREDENTIALS');
+    // Proof of who signed in six minutes ago is not proof of who is asking now.
+    assert.equal((await remove({ idToken: await idToken({ iat: now() - 360 }) })).body.error.code, 'REAUTH_REQUIRED');
+    assert.equal((await remove({ idToken: await idToken({ sub: `google-other-${runId}`, email: `${runId}-other@example.com` }) })).body.error.code, 'INVALID_REAUTH');
+    const removed = await remove({ idToken: await idToken() });
+    assert.deepEqual([removed.status, removed.body.data.status], [200, 'DELETION_REQUESTED']);
+    assert.equal((await request('/users/me', 'GET', undefined, jwt)).status, 401);
+    assert.deepEqual([(await signIn()).status, (await signIn()).body.error.code], [403, 'ACCOUNT_UNAVAILABLE']);
+  } finally {
+    delete process.env.GOOGLE_JWKS_URL; delete process.env.GOOGLE_CLIENT_ID;
+    await new Promise(resolve => google.close(resolve));
+  }
+  assert.equal((await request('/public/config')).body.data.googleClientId, null);
 });

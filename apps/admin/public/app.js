@@ -80,7 +80,7 @@ const views = {
       })) },
       { title: 'Cấp quyền', render: r => {
         if (r.status !== 'ACTIVE') return '—';
-        const role = el('select', {}, ['admin', 'support', 'branch_owner', 'branch_staff', 'coach'].map(name => el('option', { value: name, text: name })));
+        const role = el('select', {}, ['admin', 'support', 'branch_owner', 'branch_staff'].map(name => el('option', { value: name, text: name })));
         const branch = el('select', {}, [el('option', { value: '', text: '(toàn hệ thống)' }), ...branches.map(b => el('option', { value: b.id, text: b.name }))]);
         const button = el('button', { class: 'small', text: 'Cấp' });
         button.addEventListener('click', () => act(button, () => call('/admin/roles', 'POST',

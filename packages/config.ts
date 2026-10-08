@@ -3,6 +3,8 @@ export interface Config {
   databaseUrl: string; redisUrl: string; jwtSecret: string; otpSecret: string;
   webhookSecret: string; production: boolean; devOtp: boolean; devKey: string;
   fcmEnabled: boolean; port: number; realtimePort: number; corsOrigins: string[]; redisKeyPrefix: string; bindHost: string;
+  /** Reverse proxies in front of the API whose X-Forwarded-For is believed; 0 means clients connect directly. */
+  trustedProxyHops: number;
   paymentProvider: PaymentProviderName; paymentReturnUrl: string; paymentCancelUrl: string;
   payos?: { clientId: string; apiKey: string; checksumKey: string; baseUrl: string };
   vnpay?: { tmnCode: string; hashSecret: string; payUrl: string; apiUrl: string };
@@ -11,6 +13,10 @@ export interface Config {
   twilio?: { accountSid: string; authToken: string; from: string };
   refund: { fullHours: number; partialHours: number; partialPercent: number; orderHours: number };
   accountPurge: boolean;
+}
+/** OAuth client IDs whose Google sign-ins are accepted (GOOGLE_CLIENT_ID, comma separated). Apps are told the first. */
+export function googleClientIds(env: NodeJS.ProcessEnv = process.env) {
+  return (env.GOOGLE_CLIENT_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const required = (key: string, min = 1) => {
@@ -24,6 +30,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     return value;
   };
   const production = env.NODE_ENV === 'production';
+  if (googleClientIds(env).some(id => !/^[\w-]+\.apps\.googleusercontent\.com$/.test(id))) throw new Error('GOOGLE_CLIENT_ID must hold Google OAuth client IDs');
+  // It replaces Google's keys, so whoever sets it decides who can sign in: integration tests only, against a local stand-in.
+  if (env.GOOGLE_JWKS_URL && (env.NODE_ENV !== 'test' || !URL.canParse(env.GOOGLE_JWKS_URL)
+    || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(env.GOOGLE_JWKS_URL).hostname))) {
+    throw new Error('GOOGLE_JWKS_URL is only for integration tests with a key server on this machine');
+  }
   const jwtSecret = required('JWT_SECRET', 32);
   const otpSecret = required('OTP_HASH_SECRET', 32);
   const paymentProvider = env.PAYMENT_PROVIDER as PaymentProviderName;
@@ -69,6 +81,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return { databaseUrl: required('DATABASE_URL'), redisUrl: required('REDIS_URL'), jwtSecret, otpSecret, webhookSecret,
     production, devOtp, devKey, fcmEnabled: env.FCM_ENABLED === 'true', port, realtimePort,
     corsOrigins: (env.CORS_ORIGINS || '').split(',').filter(Boolean), redisKeyPrefix: env.REDIS_KEY_PREFIX || 'alobo:', bindHost: env.BIND_HOST || '127.0.0.1',
+    trustedProxyHops: integer('TRUSTED_PROXY_HOPS', 0, 0, 10),
     paymentProvider, paymentReturnUrl, paymentCancelUrl, payos, vnpay, otpDelivery, smtp, twilio, refund,
     accountPurge: env.ACCOUNT_PURGE_ENABLED !== 'false' };
 }

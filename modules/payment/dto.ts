@@ -4,9 +4,6 @@ import { IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Min } from 'class-va
 export class IntentDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID('4') bookingId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID('4') orderId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID('4') contractId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID('4') enrollmentId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID('4') ticketId?: string;
 }
 export class SandboxWebhookDto {
   @ApiProperty() @IsString() @Length(8, 128) eventId!: string;

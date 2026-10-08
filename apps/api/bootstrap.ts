@@ -16,6 +16,9 @@ import { buildOpenApi } from '../../packages/contracts/openapi';
 export async function createApplication(): Promise<INestApplication> {
   const config = loadConfig();
   const app = await NestFactory.create(ApiModule, { rawBody: true, logger: ['warn', 'error'] });
+  // Rate limits are per client address. Behind a reverse proxy that address is in X-Forwarded-For, and it is believed
+  // only for as many hops as there are proxies of ours: a larger number would let a client name its own address.
+  app.getHttpAdapter().getInstance().set('trust proxy', config.trustedProxyHops);
   app.setGlobalPrefix('api/v1');
   app.enableShutdownHooks();
   app.use(helmet());

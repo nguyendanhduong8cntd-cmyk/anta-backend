@@ -2,7 +2,7 @@
 
 Đây là bản chuyển đổi Python/FastAPI dùng chung PostgreSQL/PostGIS, Redis và SQL migrations với backend NestJS hiện có. Không đổi schema, không xóa dữ liệu, không tự chuyển Android sang cổng mới. Chạy ở `127.0.0.1:8000`; NestJS vẫn ở `127.0.0.1:3000`.
 
-Đã port: health/readiness, catalog sports/branches/yard/services/search, favorites, content/config, xác thực JWT phiên hiện có, xem/sửa hồ sơ và logout, chủ sân presign PUT/complete/archive ảnh R2 và ảnh GET ký 10 phút trong catalog. Endpoint khác (OTP/login/refresh, booking/payment, membership/academy/social/commerce/chat/admin, worker/realtime) **chưa được port** và FastAPI không quảng cáo chúng là hoạt động. Không dùng FastAPI làm backend Android/production trước khi đạt parity và chạy integration test đầy đủ.
+Đã port: health/readiness, catalog sports/branches/yard/services/search, favorites, content/config, xác thực JWT phiên hiện có, xem/sửa hồ sơ và logout, chủ sân presign PUT/complete/archive ảnh R2 và ảnh GET ký 10 phút trong catalog. Endpoint khác (OTP/login/refresh, booking/payment, commerce/chat/admin, worker/realtime) **chưa được port** và FastAPI không quảng cáo chúng là hoạt động. Không dùng FastAPI làm backend Android/production trước khi đạt parity và chạy integration test đầy đủ.
 
 ## Chạy bằng Docker
 

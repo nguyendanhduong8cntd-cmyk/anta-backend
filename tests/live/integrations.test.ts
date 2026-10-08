@@ -1,16 +1,14 @@
 // Live checks against real third-party accounts. Each test is skipped unless its credentials are present in the
 // environment, so `npm run test:live` is safe to run anywhere and never touches production data: objects are written
-// under a throwaway `live-test/` prefix and removed, Firebase test users are deleted, and OTP mail/SMS goes only to
+// under a throwaway `live-test/` prefix and removed, and OTP mail/SMS goes only to
 // the recipient named in LIVE_TEST_EMAIL / LIVE_TEST_PHONE.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import sharp from 'sharp';
-import { verifiedGoogleIdentity } from '../../modules/identity/firebase';
+import { verifiedGoogleIdentity } from '../../modules/identity/google';
 import { deliverOtp, smtpTransport, twilioTransport } from '../../modules/identity/delivery';
 import { sanitizeCourtImage } from '../../modules/media/processing';
 
@@ -41,27 +39,12 @@ test('R2: presigned PUT, HEAD, GET, WebP re-encode and delete on the real bucket
   } finally { await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })); }
 });
 
-test('Firebase: service account verifies a real ID token and the Google-only rule holds', { skip: missing('FIREBASE_PROJECT_ID', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_WEB_API_KEY') }, async () => {
-  const app = getApps().find(item => item.name === 'alobo-live-test') || initializeApp({ credential: applicationDefault(), projectId: env.FIREBASE_PROJECT_ID }, 'alobo-live-test');
-  const uid = `live-test-${randomUUID()}`;
-  try {
-    // Mint a custom token, exchange it at Firebase Auth for a real ID token, then run it through the app's verifier.
-    const custom = await getAuth(app).createCustomToken(uid);
-    const exchanged = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${encodeURIComponent(env.FIREBASE_WEB_API_KEY!)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: custom, returnSecureToken: true }) });
-    assert.equal(exchanged.status, 200, 'custom token exchange failed: check FIREBASE_WEB_API_KEY belongs to FIREBASE_PROJECT_ID');
-    const { idToken } = await exchanged.json() as { idToken: string };
-    assert.equal((await getAuth(app).verifyIdToken(idToken, true)).uid, uid);
-    // A genuine token that is not a verified Google sign-in must be refused by the login path.
-    await assert.rejects(verifiedGoogleIdentity(idToken), (error: any) => error.code === 'UNSUPPORTED_SOCIAL_IDENTITY');
-    await assert.rejects(verifiedGoogleIdentity(idToken.slice(0, -4) + 'AAAA'), (error: any) => error.code === 'INVALID_SOCIAL_TOKEN');
-  } finally { await getAuth(app).deleteUser(uid).catch(() => undefined); }
-});
-
-test('Firebase: a real Google sign-in token is accepted', { skip: missing('FIREBASE_PROJECT_ID', 'GOOGLE_APPLICATION_CREDENTIALS', 'LIVE_TEST_GOOGLE_ID_TOKEN') }, async () => {
+test('Google: a real sign-in token for this backend is accepted and a tampered one fails against the published keys', { skip: missing('GOOGLE_CLIENT_ID', 'LIVE_TEST_GOOGLE_ID_TOKEN') }, async () => {
+  // LIVE_TEST_GOOGLE_ID_TOKEN is an ID token issued for GOOGLE_CLIENT_ID within the last ten minutes.
   const identity = await verifiedGoogleIdentity(env.LIVE_TEST_GOOGLE_ID_TOKEN!);
   assert.equal(identity.provider, 'google');
   assert.match(identity.email, /@/);
+  await assert.rejects(verifiedGoogleIdentity(env.LIVE_TEST_GOOGLE_ID_TOKEN!.slice(0, -4) + 'AAAA'), (error: any) => error.code === 'INVALID_SOCIAL_TOKEN');
 });
 
 test('OTP email is delivered through the configured SMTP server', { skip: missing('SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'LIVE_TEST_EMAIL') }, async () => {

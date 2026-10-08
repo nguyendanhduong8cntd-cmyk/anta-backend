@@ -3,8 +3,8 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 export class RoleDto {
   @ApiProperty() @IsUUID('4') userId!: string;
-  @ApiProperty({ enum: ['admin', 'support', 'branch_owner', 'branch_staff', 'coach'] })
-  @IsIn(['admin', 'support', 'branch_owner', 'branch_staff', 'coach']) role!: string;
+  @ApiProperty({ enum: ['admin', 'support', 'branch_owner', 'branch_staff'] })
+  @IsIn(['admin', 'support', 'branch_owner', 'branch_staff']) role!: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID('4') branchId?: string;
 }
 export class AdminListQuery {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describe, hourlyPrice, isImportable, isLocalDatabase, openingHours, PriceRow, PriceTable, slotMinutes, stableId, tableSport, typicalPrice, Venue, venueSports, yardsOf } from '../../scripts/import-venues';
+import { advertisedRating, describe, hourlyPrice, isImportable, isLocalDatabase, openingHours, PriceRow, PriceTable, slotMinutes, stableId, tableSport, typicalPrice, Venue, venueImages, venueSports, yardsOf } from '../../scripts/import-venues';
 
 const venue: Venue = { slug: 'sport_demo', name: 'Demo', address: '1 Demo', hours: '05:00 - 23:00', sports: ['Cầu lông', 'Pickleball'] };
 const row = (walkIn: number | null, extra: Partial<PriceRow> = {}): PriceRow => ({ days: 'T2 - CN', time: '5h - 6h', fixed: null, walkIn, ...extra });
@@ -101,20 +101,48 @@ test('a venue is found under the sports it lists, its yards serve and it was col
   assert.deepEqual(slugs.sort(), ['badminton', 'golf', 'multi-sport', 'tennis']);
 });
 
-test('description carries the price lists, both price columns and the source link', () => {
+test('description is the price lists, one per line with both price columns, and nothing about where they came from', () => {
   const text = describe({ ...venue, rating: 4.7, reviewCount: 12, bookingUrl: 'https://example.test/san/sport_demo', priceTables: [
     { group: 'Cầu lông', name: 'Sân thảm', columns: ['Cố định', 'Vãng lai'], rows: [{ days: 'T2 - T6', time: '5h - 17h', fixed: 60000, walkIn: 70000 }] },
     { group: 'Sân 7', name: 'Sân 7', columns: ['Giá'], rows: [{ days: null, time: '6h - 15h', fixed: 880000, walkIn: 880000, per: '1h30' }] }] });
-  assert.match(text, /Môn: Cầu lông, Pickleball/);
-  assert.match(text, /Cầu lông - Sân thảm: T2 - T6 5h - 17h: Vãng lai 70\.000 ₫, cố định 60\.000 ₫\./);
-  assert.match(text, /\nSân 7: 6h - 15h: 880\.000 ₫\/1h30\./);
-  assert.match(text, /Đánh giá 4\.7\/5 \(12 lượt\)/);
-  assert.match(text, /Nguồn: https:\/\/example\.test\/san\/sport_demo$/);
+  assert.equal(text, 'Cầu lông - Sân thảm: T2 - T6 5h - 17h: Vãng lai 70.000 ₫, cố định 60.000 ₫.\nSân 7: 6h - 15h: 880.000 ₫/1h30.');
+  assert.equal(describe({ ...venue, priceTables: [] }), '');
 });
 
-test('a long description is cut without losing the source link', () => {
-  const rows = Array.from({ length: 400 }, (_, hour) => row(100000 + hour, { time: `${hour}h - ${hour + 1}h` }));
-  const text = describe({ ...venue, bookingUrl: 'https://example.test/san/sport_demo', priceTables: [{ group: 'Sân', name: 'Giá', rows }] });
-  assert.ok(text.length <= 4000);
-  assert.match(text, /Nguồn: https:\/\/example\.test\/san\/sport_demo$/);
+test('a price list is titled once and lists each time band once', () => {
+  const band = { days: 'T2 - T6', time: '5h - 15h', fixed: 150000, walkIn: 150000 };
+  const text = describe({ ...venue, priceTables: [
+    { group: 'Sân VIP', name: 'Sân VIP - Giảm 10%', rows: [band, { ...band, time: '15h - 24h', walkIn: 250000 }, band] },
+    { group: 'Sân thường', name: 'sân thường', rows: [band] }, { group: null, name: null, rows: [band] }, { group: 'Sân đôi', name: null, rows: [band] }] });
+  assert.deepEqual(text.split('\n'), ['Sân VIP - Giảm 10%: T2 - T6 5h - 15h: 150.000 ₫; T2 - T6 15h - 24h: Vãng lai 250.000 ₫, cố định 150.000 ₫.',
+    'sân thường: T2 - T6 5h - 15h: 150.000 ₫.', 'Bảng giá: T2 - T6 5h - 15h: 150.000 ₫.', 'Sân đôi: T2 - T6 5h - 15h: 150.000 ₫.']);
+});
+
+test('a long description drops whole price lists rather than cutting one in the middle', () => {
+  const rows = Array.from({ length: 100 }, (_, hour) => row(100000 + hour, { time: `${hour}h - ${hour + 1}h` }));
+  const text = describe({ ...venue, priceTables: [{ group: 'Sân A', name: 'Giá', rows }, { group: 'Sân B', name: 'Giá', rows }] });
+  assert.ok(text.length > 0 && text.length <= 4000);
+  assert.match(text, /^Sân A - Giá: /);
+  assert.doesNotMatch(text, /Sân B/);
+  assert.ok(text.endsWith('.'));
+  // A single list that is too long on its own is cut rather than dropped.
+  const huge = describe({ ...venue, priceTables: [{ group: 'Sân A', name: 'Giá', rows: Array.from({ length: 400 }, (_, hour) => row(100000 + hour, { time: `${hour}h - ${hour + 1}h` })) }] });
+  assert.equal(huge.length, 4000);
+  assert.match(huge, /^Sân A - Giá: /);
+});
+
+test('an advertised rating is kept to one decimal, and a figure that is not a score out of five is no rating', () => {
+  assert.deepEqual(advertisedRating({ ...venue, rating: 4.66, reviewCount: 12 }), { rating: 4.7, reviewCount: 12 });
+  assert.deepEqual(advertisedRating({ ...venue, rating: 5 }), { rating: 5, reviewCount: 0 });
+  for (const rating of [0, 5.1, -1, null, undefined]) assert.deepEqual(advertisedRating({ ...venue, rating, reviewCount: 3 }), { rating: null, reviewCount: 0 });
+  assert.deepEqual(advertisedRating({ ...venue, rating: 4, reviewCount: 2.5 }), { rating: 4, reviewCount: 0 });
+  assert.deepEqual(advertisedRating({ ...venue, rating: 4, reviewCount: 2 ** 31 }), { rating: 4, reviewCount: 0 });
+});
+
+test('photos are kept as collected, cover first and without repeats', () => {
+  const photos = venueImages({ ...venue, cover: 'https://files.test/main/cover-1-thumb.jpg', yardDiagram: 'https://files.test/main/yardDiagram-2.jpg',
+    gallery: ['https://files.test/image/img-a-3-thumb.jpg', 'https://files.test/image/img-a-3-thumb.jpg', 'https://files.test/image/img-b-4.png'] });
+  // Thumbnail links are not rewritten: a cover has no full-size original and a gallery original can be 13 MB.
+  assert.deepEqual(photos, ['https://files.test/main/cover-1-thumb.jpg', 'https://files.test/image/img-a-3-thumb.jpg', 'https://files.test/image/img-b-4.png', 'https://files.test/main/yardDiagram-2.jpg']);
+  assert.deepEqual(venueImages(venue), []);
 });

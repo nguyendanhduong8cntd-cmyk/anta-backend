@@ -7,6 +7,9 @@ import { CatalogService } from '../catalog/service';
 import { bookingRefundPercent, RefundService } from '../payment/refunds';
 import { assertTransition, BookingStatus, validateSlot } from './domain';
 import { AvailabilityQuery, BookingQuery, BookingServiceDto, RecurringBookingDto, ReviewDto, SlotDto } from './dto';
+/** A booking with the names a client shows for it. */
+const BOOKING_VIEW = `k.*,b.name AS branch_name,b.address AS branch_address,b.timezone AS branch_timezone,b.images->>0 AS branch_image,y.name AS yard_name
+  FROM booking.bookings k JOIN catalog.branches b ON b.id=k.branch_id JOIN catalog.yards y ON y.id=k.yard_id`;
 @Injectable()
 export class BookingService {
   constructor(private readonly db: Database, private readonly catalog: CatalogService, private readonly idem: Idempotency,
@@ -122,7 +125,7 @@ export class BookingService {
     return { ...row, bookings };
   }
   async get(userId: string, id: string, tx: DbClient = this.db.pool) {
-    const row = (await tx.query('SELECT * FROM booking.bookings WHERE id=$1 AND user_id=$2', [id, userId])).rows[0];
+    const row = (await tx.query(`SELECT ${BOOKING_VIEW} WHERE k.id=$1 AND k.user_id=$2`, [id, userId])).rows[0];
     invariant(row, 'NOT_FOUND', 'Booking not found', 404);
     return row;
   }
@@ -142,7 +145,8 @@ export class BookingService {
   }
   async list(userId: string, q: BookingQuery) {
     const page = q.page || 1, pageSize = q.pageSize || 20;
-    const rows = (await this.db.query('SELECT *,count(*) OVER()::int AS total FROM booking.bookings WHERE user_id=$1 ORDER BY created_at DESC,id LIMIT $2 OFFSET $3', [userId, pageSize, (page - 1) * pageSize])).rows;
+    const rows = (await this.db.query(`SELECT count(*) OVER()::int AS total,${BOOKING_VIEW} WHERE k.user_id=$1
+      ORDER BY k.created_at DESC,k.id LIMIT $2 OFFSET $3`, [userId, pageSize, (page - 1) * pageSize])).rows;
     return { items: rows.map(({ total, ...row }) => row), page, pageSize, total: rows[0]?.total || 0 };
   }
   async cancel(userId: string, id: string, key: string | undefined, requestId: string) {
