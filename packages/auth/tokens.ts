@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 export interface Principal { userId: string; sessionId: string }
-const issuer = 'alobo-clone';
-const audience = 'alobo-android';
+const issuer = 'anta';
+const audience = 'anta-android';
 export async function signAccess(userId: string, sessionId: string, secret: string) {
   return new SignJWT({ sid: sessionId }).setProtectedHeader({ alg: 'HS256' }).setSubject(userId)
     .setIssuer(issuer).setAudience(audience).setIssuedAt().setExpirationTime('15m').sign(new TextEncoder().encode(secret));

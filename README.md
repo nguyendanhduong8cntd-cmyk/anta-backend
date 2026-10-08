@@ -1,12 +1,12 @@
-# Alobo clone backend — implementation in progress
+# Anta backend — implementation in progress
 
-Backend mới theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md), không gọi hoặc giả danh backend Alobo gốc. Android hiện chưa nối với API này.
+Backend của app đặt sân Anta, theo [kiến trúc đã viết](docs/BACKEND_ARCHITECTURE.md). App Android ở repo [anta-android](https://github.com/nguyendanhduong8cntd-cmyk/anta-android) gọi API này.
 
 **Cập nhật 07/10/2026.** Đã có: cổng thanh toán PayOS và VNPay, OTP qua SMTP/Twilio, hoàn tiền khi hủy, thư mục khóa E2E cho chat, tự động xóa dữ liệu tài khoản và portal quản trị tại `/admin`. Tất cả đã qua test với cổng giả lập; **chưa chạy với tài khoản merchant, SMTP, Twilio, R2, FCM hay Google thật** vì chưa có khóa. Xem [Tích hợp thật](#tích-hợp-thật) để bật và kiểm tra.
 
 **Cập nhật 08/10/2026.** Sản phẩm không còn sự kiện, khoá học và gói hội viên. Migration `010_remove_events_courses_membership.sql` xóa dữ liệu và schema của ba phần này (kể cả giao dịch đã thanh toán cho chúng) và **không hoàn tác được**; sao lưu trước khi chạy trên database có dữ liệu cần giữ.
 
-Đang chuyển dần sang **Python/FastAPI**: bản chạy song song tại cổng 8000 đã có catalog/content, xác thực phiên JWT hiện có và ảnh sân R2. Các module còn lại vẫn ở NestJS; chưa chuyển Android hoặc thay thế cổng 3000. Xem [hướng dẫn FastAPI](python_backend/README.md).
+Đang chuyển dần sang **Python/FastAPI**: bản chạy song song tại cổng 8000 đã có catalog/content, xác thực phiên JWT hiện có và ảnh sân R2. Các module còn lại vẫn ở NestJS; app Android vẫn gọi cổng 3000. Xem [hướng dẫn FastAPI](python_backend/README.md).
 
 ## Phần đã triển khai
 
@@ -94,11 +94,11 @@ Bản debug của app Android không có secret webhook nên dùng đường ri�
 
 ## Nhập dữ liệu sân
 
-Danh sách sân thu thập từ trang đặt lịch công khai (đã được nền tảng và chủ sân cho phép, chỉ dùng trên localhost) nằm ở `data/venues/alobo-hcm.json`. Nhập vào catalog:
+Danh sách sân thu thập từ trang đặt lịch công khai (đã được nền tảng và chủ sân cho phép, chỉ dùng trên localhost) nằm ở `data/venues/hcm.json`. Nhập vào catalog:
 
 ```powershell
 npm.cmd run build
-npm.cmd run db:import-venues -- data/venues/alobo-hcm.json
+npm.cmd run db:import-venues -- data/venues/hcm.json
 ```
 
 Chạy lại không tạo trùng: ID suy ra từ slug của sân nên lần sau chỉ cập nhật đúng các dòng cũ. Script bị chặn khi `NODE_ENV=production`.
@@ -112,7 +112,7 @@ Bộ thu thập nằm ở `tools/venue-collector` (xem README trong thư mục �
 
 ## Ảnh sân trên Cloudflare R2
 
-Tạo private bucket `alobo-court-images` trong R2, rồi tạo **R2 S3 Access Key ID + Secret Access Key** có quyền Object Read & Write chỉ trên bucket đó. Điền `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` vào `.env` cục bộ hoặc secret manager; `.env.example` chỉ chứa account ID/bucket, không chứa khóa. Nếu bucket thuộc jurisdiction EU/US/FedRAMP, đặt thêm `R2_ENDPOINT` tương ứng. Không dùng token quản trị đã gửi trong chat làm khóa lưu trữ và nên thu hồi/đổi token đó.
+Tạo private bucket `anta-court-images` trong R2, rồi tạo **R2 S3 Access Key ID + Secret Access Key** có quyền Object Read & Write chỉ trên bucket đó. Điền `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` vào `.env` cục bộ hoặc secret manager; `.env.example` chỉ chứa account ID/bucket, không chứa khóa. Nếu bucket thuộc jurisdiction EU/US/FedRAMP, đặt thêm `R2_ENDPOINT` tương ứng. Không dùng token quản trị đã gửi trong chat làm khóa lưu trữ và nên thu hồi/đổi token đó.
 
 Luồng API cho tài khoản `branch_owner`/`admin`:
 
@@ -169,14 +169,14 @@ Socket.IO: handshake `auth: {token: accessToken, after: "last-event-id"}`; lắn
 Integration test chỉ chạy database có tên kết thúc `_test`; fixture riêng mỗi lần chạy và Redis key prefix riêng, không xóa database hoặc flush Redis.
 
 ```powershell
-docker compose -f infra/compose.yaml exec -T postgres psql -U alobo -d postgres -c "CREATE DATABASE alobo_test"
+docker compose -f infra/compose.yaml exec -T postgres psql -U anta -d postgres -c "CREATE DATABASE anta_test"
 npm.cmd test
 npm.cmd run test:integration
 npm.cmd run typecheck
 npm.cmd audit --omit=dev
 ```
 
-Chỉ tạo `alobo_test` một lần; nếu đã tồn tại bỏ qua lệnh CREATE DATABASE. CI được cấu hình ở [backend.yml](.github/workflows/backend.yml); cần xem kết quả trên GitHub sau lần push đầu tiên.
+Chỉ tạo `anta_test` một lần; nếu đã tồn tại bỏ qua lệnh CREATE DATABASE. CI được cấu hình ở [backend.yml](.github/workflows/backend.yml); cần xem kết quả trên GitHub sau lần push đầu tiên.
 
 Đã test database thật: tranh slot, exclusion constraint, retry/idempotency, OTP/refresh, ownership, webhook/late payment, notification, SSE/Socket replay; thêm voucher quota/order payment, chat invitation/sequence, booking add-on/review, RBAC và thu hồi phiên khi yêu cầu xóa tài khoản. R2 signing/catalog binding dùng khóa giả trong integration test; upload thật cần credential/bucket. Đăng nhập Google được test với một máy chủ khóa giả lập đứng thay Google; chưa chạy với client ID thật.
 
@@ -184,7 +184,7 @@ Chỉ tạo `alobo_test` một lần; nếu đã tồn tại bỏ qua lệnh CRE
 
 | Phạm vi | Trạng thái |
 |---|---|
-| Android API client/DTO generation, bind dữ liệu vào UI | Chưa triển khai; không thay đổi Android trong đợt backend này |
+| Android | App gọi danh sách sân, đặt sân, thanh toán sandbox, tài khoản, đăng nhập Google và sân yêu thích; chưa có chat và thông báo đẩy |
 | SMS/email OTP thật | Có SMTP và Twilio; chưa gửi thử với tài khoản thật |
 | Google login/linked account và xóa tài khoản | Kiểm ID token của Google + explicit link đã có và qua integration test với khóa giả lập; chưa kiểm với client ID thật (`npm run test:live`). Purge tự động sau 30 ngày đã có; chính sách lưu trữ pháp lý và backup chưa xử lý |
 | Merchant payment thật, receipt/refund/reconciliation | Có adapter PayOS/VNPay và hoàn tiền; chưa chạy với merchant thật, chưa có biên lai và đối soát định kỳ |

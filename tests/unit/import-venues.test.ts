@@ -52,9 +52,9 @@ test('only complete records are importable, and only into a local database', () 
   assert.equal(isImportable({ ...complete, name: ' ' }), false);
   assert.equal(isImportable({ ...complete, sports: undefined as unknown as string[] }), false);
   assert.equal(isImportable({ ...complete, priceTables: [{ group: null, name: null, rows: undefined as unknown as PriceRow[] }] }), false);
-  assert.equal(isLocalDatabase('postgresql://alobo:secret@127.0.0.1:55432/alobo'), true);
-  assert.equal(isLocalDatabase('postgresql://alobo:secret@postgres:5432/alobo'), true);
-  assert.equal(isLocalDatabase('postgresql://alobo:secret@db.example.com:5432/alobo'), false);
+  assert.equal(isLocalDatabase('postgresql://anta:secret@127.0.0.1:55432/anta'), true);
+  assert.equal(isLocalDatabase('postgresql://anta:secret@postgres:5432/anta'), true);
+  assert.equal(isLocalDatabase('postgresql://anta:secret@db.example.com:5432/anta'), false);
   assert.equal(isLocalDatabase(undefined), false);
 });
 

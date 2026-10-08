@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 export async function migrate(pool: Pool) {
   const client = await pool.connect();
   try {
-    await client.query("SELECT pg_advisory_lock(hashtextextended('alobo-migrations',0))");
+    await client.query("SELECT pg_advisory_lock(hashtextextended('anta-migrations',0))");
     await client.query('CREATE TABLE IF NOT EXISTS public.schema_migrations(name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
     for (const name of (await readdir(resolve('migrations'))).filter(f => /^\d+.*\.sql$/.test(f)).sort()) {
       const sql = await readFile(resolve('migrations', name), 'utf8');
@@ -17,7 +17,7 @@ export async function migrate(pool: Pool) {
       catch (error) { await client.query('ROLLBACK'); throw error; }
       console.log(JSON.stringify({ event: 'migration.applied', name }));
     }
-  } finally { await client.query("SELECT pg_advisory_unlock(hashtextextended('alobo-migrations',0))"); client.release(); }
+  } finally { await client.query("SELECT pg_advisory_unlock(hashtextextended('anta-migrations',0))"); client.release(); }
 }
 if (require.main === module) {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });

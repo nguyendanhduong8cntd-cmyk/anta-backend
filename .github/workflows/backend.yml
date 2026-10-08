@@ -9,12 +9,12 @@ jobs:
       postgres:
         image: postgis/postgis:16-3.5
         env:
-          POSTGRES_USER: alobo
+          POSTGRES_USER: anta
           POSTGRES_PASSWORD: integration-test-password
-          POSTGRES_DB: alobo_test
+          POSTGRES_DB: anta_test
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U alobo -d alobo_test"
+          --health-cmd "pg_isready -U anta -d anta_test"
           --health-interval 5s --health-timeout 3s --health-retries 20
       redis:
         image: redis:7.4-alpine
@@ -24,8 +24,8 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 20
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://alobo:integration-test-password@127.0.0.1:5432/alobo_test
-      TEST_DATABASE_URL: postgresql://alobo:integration-test-password@127.0.0.1:5432/alobo_test
+      DATABASE_URL: postgresql://anta:integration-test-password@127.0.0.1:5432/anta_test
+      TEST_DATABASE_URL: postgresql://anta:integration-test-password@127.0.0.1:5432/anta_test
       REDIS_URL: redis://127.0.0.1:6379
       JWT_SECRET: ci-test-only-secret-do-not-use-in-production-32
       OTP_HASH_SECRET: ci-test-only-otp-secret-do-not-use-in-production
@@ -46,4 +46,4 @@ jobs:
       - run: npm run test:integration
       - run: npm run openapi
       - run: npm audit --omit=dev --audit-level=moderate
-      - run: docker build -f infra/Dockerfile -t alobo-backend:test .
+      - run: docker build -f infra/Dockerfile -t anta-backend:test .

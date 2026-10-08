@@ -17,7 +17,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 
-logger = logging.getLogger("alobo_api")
+logger = logging.getLogger("anta_api")
 
 
 class ApiError(Exception):
@@ -86,7 +86,7 @@ async def principal(request: Request, authorization: str | None = Header(default
         raise ApiError("UNAUTHORIZED", "Authentication required", 401)
     try:
         claims = jwt.decode(authorization[7:], request.app.state.settings.jwt_secret,
-            algorithms=["HS256"], issuer="alobo-clone", audience="alobo-android",
+            algorithms=["HS256"], issuer="anta", audience="anta-android",
             options={"require": ["exp", "iat", "iss", "aud", "sub"]})
         user_id, session_id = uuid.UUID(claims["sub"]), uuid.UUID(claims["sid"])
     except (jwt.PyJWTError, ValueError, KeyError, TypeError):

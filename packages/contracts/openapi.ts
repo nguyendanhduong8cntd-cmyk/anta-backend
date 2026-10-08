@@ -9,8 +9,8 @@ const array = (name: string): SchemaObject => ({ type: 'array', items: ref(name)
 const object = (properties: Record<string, any>, required = Object.keys(properties)): SchemaObject => ({ type: 'object', properties, required });
 const page = (name: string) => object({ items: array(name), page: int, pageSize: int, total: int });
 export function buildOpenApi(app: INestApplication) {
-  const doc = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle('Alobo Clone API').setVersion('0.1.0')
-    .setDescription('Clone backend contract, not original Alobo API. Payments go through the configured provider (sandbox, PayOS or VNPay); only signed provider notifications confirm them.').addBearerAuth().build());
+  const doc = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle('Anta API').setVersion('0.1.0')
+    .setDescription('Anta backend contract. Payments go through the configured provider (sandbox, PayOS or VNPay); only signed provider notifications confirm them.').addBearerAuth().build());
   const uuid = str('uuid'), time = str('date-time');
   const schemas: Record<string, SchemaObject> = {
     ApiError: object({ data: { nullable: true, type: 'object' }, meta: object({ requestId: str() }), error: object({ code: str(), message: str() }) }),

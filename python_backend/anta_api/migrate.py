@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 def apply_migrations(database_url: str, folder: Path) -> list[str]:
     applied: list[str] = []
     with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute("SELECT pg_advisory_lock(hashtextextended('alobo-migrations',0))")
+        conn.execute("SELECT pg_advisory_lock(hashtextextended('anta-migrations',0))")
         try:
             conn.execute("""CREATE TABLE IF NOT EXISTS public.schema_migrations(
                 name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())""")
@@ -34,7 +34,7 @@ def apply_migrations(database_url: str, folder: Path) -> list[str]:
                         (path.name, checksum))
                 applied.append(path.name)
         finally:
-            conn.execute("SELECT pg_advisory_unlock(hashtextextended('alobo-migrations',0))")
+            conn.execute("SELECT pg_advisory_unlock(hashtextextended('anta-migrations',0))")
     return applied
 
 

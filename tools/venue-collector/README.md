@@ -1,6 +1,6 @@
 # Bộ thu thập sân
 
-Đọc thông tin sân từ trang đặt lịch công khai `datlich.alobo.vn`: mở trang bằng Edge không giao diện, lọc theo môn, mở lần lượt từng sân gần nhất và đọc những gì trang hiển thị (cây accessibility). Chỉ dùng khi đã được nền tảng và chủ sân cho phép; dữ liệu chỉ phục vụ bản chạy localhost.
+Đọc thông tin sân từ trang đặt lịch công khai ghi ở `ORIGIN` trong `collect.js`: mở trang bằng Edge không giao diện, lọc theo môn, mở lần lượt từng sân gần nhất và đọc những gì trang hiển thị (cây accessibility). Chỉ dùng khi đã được nền tảng và chủ sân cho phép; dữ liệu chỉ phục vụ bản chạy localhost.
 
 Giới hạn cố ý của công cụ:
 
@@ -15,8 +15,8 @@ Cần Microsoft Edge và Node 24. `playwright-core` không nằm trong dependenc
 ```powershell
 cd tools\venue-collector
 npm.cmd install --no-save --prefix . playwright-core
-node collect.js ..\..\data\venues\alobo-hcm.json                    # cả 11 môn
-node collect.js ..\..\data\venues\alobo-hcm.json "Cầu lông" "Padel" # chỉ vài môn
+node collect.js ..\..\data\venues\hcm.json                    # cả 11 môn
+node collect.js ..\..\data\venues\hcm.json "Cầu lông" "Padel" # chỉ vài môn
 ```
 
 Tên môn viết đúng như trên trang: `Pickleball`, `Cầu lông`, `Bóng đá`, `Bóng rổ`, `Quần vợt`, `Đa năng`, `Typti`, `Lướt ván`, `B.Chuyền`, `Golf`, `Padel`.
@@ -30,7 +30,7 @@ Tên môn viết đúng như trên trang: `Pickleball`, `Cầu lông`, `Bóng đ
 
 Kết quả ghi dần vào file đích nên có thể dừng giữa chừng: chạy lại sẽ bỏ qua môn đã xong và sân đã đọc. Muốn đọc lại một môn, xóa mục của môn đó trong `bySport` và các sân tương ứng trong `venues`; muốn lấy lại từ đầu thì xóa file. Chạy quá 10 phút nên khởi động ở một cửa sổ terminal riêng.
 
-Sau khi thu thập, nhập vào database bằng `npm.cmd run db:import-venues -- data/venues/alobo-hcm.json` (xem README của backend).
+Sau khi thu thập, nhập vào database bằng `npm.cmd run db:import-venues -- data/venues/hcm.json` (xem README của backend).
 
 ## Dữ liệu mỗi sân
 

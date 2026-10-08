@@ -8,7 +8,7 @@ import { migrate } from '../../scripts/migrate';
 import { seed, demoIds } from '../../scripts/seed';
 import { signWebhook } from '../../modules/payment/signature';
 
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://alobo:alobo_local@127.0.0.1:55432/alobo_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://anta:anta_local@127.0.0.1:55432/anta_test';
 assert.match(new URL(process.env.DATABASE_URL).pathname, /_test$/);
 process.env.NODE_ENV = 'test';
 process.env.DEV_OTP_ENABLED = 'true';
@@ -16,7 +16,7 @@ process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';
 for (const key of ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL']) delete process.env[key];
 const runId = randomUUID().slice(0, 8);
-process.env.REDIS_KEY_PREFIX = `alobo-domains-${runId}:`;
+process.env.REDIS_KEY_PREFIX = `anta-domains-${runId}:`;
 const branchId = randomUUID();
 const serviceId = randomUUID();
 const yardId = randomUUID();
@@ -170,7 +170,7 @@ test('court photo R2 signing is owner-only and signed reads follow branch/yard s
   assert.equal((await request(`/branches/${branchId}/images/presign`, 'POST', dto, other.accessToken)).status, 403);
   assert.equal((await request(`/branches/${branchId}/images/presign`, 'POST', dto, owner.accessToken)).status, 503);
   process.env.R2_ACCOUNT_ID = 'a'.repeat(32);
-  process.env.R2_BUCKET = 'alobo-court-images';
+  process.env.R2_BUCKET = 'anta-court-images';
   process.env.R2_ACCESS_KEY_ID = 'test-access-key-id';
   process.env.R2_SECRET_ACCESS_KEY = 'test-secret-access-key-not-real';
   try {

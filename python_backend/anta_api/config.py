@@ -30,7 +30,7 @@ class Settings:
             database_url=database_url,
             redis_url=redis_url,
             jwt_secret=jwt_secret,
-            redis_key_prefix=os.getenv("REDIS_KEY_PREFIX", "alobo:"),
+            redis_key_prefix=os.getenv("REDIS_KEY_PREFIX", "anta:"),
             r2_account_id=os.getenv("R2_ACCOUNT_ID", ""),
             r2_bucket=os.getenv("R2_BUCKET", ""),
             r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", ""),

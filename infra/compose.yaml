@@ -1,6 +1,6 @@
-name: alobo-clone-backend
+name: anta-backend
 x-backend: &backend
-  image: alobo-backend:local
+  image: anta-backend:local
   build:
     context: ..
     dockerfile: infra/Dockerfile
@@ -8,7 +8,7 @@ x-backend: &backend
   environment:
     NODE_ENV: development
     BIND_HOST: 0.0.0.0
-    DATABASE_URL: postgresql://alobo:alobo_local@postgres:5432/alobo
+    DATABASE_URL: postgresql://anta:anta_local@postgres:5432/anta
     REDIS_URL: redis://redis:6379
   profiles: ["app"]
   restart: unless-stopped
@@ -16,13 +16,13 @@ services:
   postgres:
     image: postgis/postgis:16-3.5
     environment:
-      POSTGRES_USER: alobo
-      POSTGRES_PASSWORD: alobo_local
-      POSTGRES_DB: alobo
+      POSTGRES_USER: anta
+      POSTGRES_PASSWORD: anta_local
+      POSTGRES_DB: anta
     ports: ["127.0.0.1:55432:5432"]
     volumes: ["postgres-data:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U alobo -d alobo"]
+      test: ["CMD-SHELL", "pg_isready -U anta -d anta"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -68,28 +68,28 @@ services:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
   migrate-python:
-    image: alobo-backend-fastapi:local
+    image: anta-backend-fastapi:local
     build:
       context: ..
       dockerfile: infra/Dockerfile.fastapi
     env_file: ../.env
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://alobo:alobo_local@postgres:5432/alobo
+      DATABASE_URL: postgresql://anta:anta_local@postgres:5432/anta
       REDIS_URL: redis://redis:6379
-    command: ["python", "-m", "alobo_api.migrate"]
+    command: ["python", "-m", "anta_api.migrate"]
     profiles: ["python"]
     depends_on:
       postgres: { condition: service_healthy }
   api-python:
-    image: alobo-backend-fastapi:local
+    image: anta-backend-fastapi:local
     build:
       context: ..
       dockerfile: infra/Dockerfile.fastapi
     env_file: ../.env
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://alobo:alobo_local@postgres:5432/alobo
+      DATABASE_URL: postgresql://anta:anta_local@postgres:5432/anta
       REDIS_URL: redis://redis:6379
     ports: ["127.0.0.1:8000:8000"]
     profiles: ["python"]

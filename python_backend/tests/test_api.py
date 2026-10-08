@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
-from alobo_api.main import app
+from anta_api.main import app
 
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")

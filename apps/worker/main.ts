@@ -17,8 +17,8 @@ async function main() {
   const config = loadConfig(), db = app.get(Database);
   const connection = new Redis(config.redisUrl, { maxRetriesPerRequest: null });
   connection.on('error', () => console.error(JSON.stringify({ event: 'worker.redis_error' })));
-  const queue = new Queue('alobo-notifications', { connection });
-  const worker = new Worker('alobo-notifications', job => deliverNotification(db, job.data.eventId), { connection, concurrency: 5 });
+  const queue = new Queue('anta-notifications', { connection });
+  const worker = new Worker('anta-notifications', job => deliverNotification(db, job.data.eventId), { connection, concurrency: 5 });
   worker.on('failed', job => console.error(JSON.stringify({ event: 'worker.job_failed', jobId: job?.id })));
   worker.on('error', () => console.error(JSON.stringify({ event: 'worker.queue_error' })));
   let stopping = false, busy = false;

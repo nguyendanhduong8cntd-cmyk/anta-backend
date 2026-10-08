@@ -12645,8 +12645,8 @@
     }
   },
   "info": {
-    "title": "Alobo Clone API",
-    "description": "Clone backend contract, not original Alobo API. Payments go through the configured provider (sandbox, PayOS or VNPay); only signed provider notifications confirm them.",
+    "title": "Anta API",
+    "description": "Anta backend contract. Payments go through the configured provider (sandbox, PayOS or VNPay); only signed provider notifications confirm them.",
     "version": "0.1.0",
     "contact": {}
   },

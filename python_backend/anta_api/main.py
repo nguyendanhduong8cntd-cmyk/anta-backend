@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Alobo Clone API — FastAPI port", version="0.1.0",
+    app = FastAPI(title="Anta API — FastAPI port", version="0.1.0",
         docs_url="/docs", openapi_url="/docs-json", lifespan=lifespan)
     register_http(app)
 
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unknown_error(request: Request, error: Exception):
-        logging.getLogger("alobo_api").error("Unhandled %s requestId=%s", type(error).__name__,
+        logging.getLogger("anta_api").error("Unhandled %s requestId=%s", type(error).__name__,
             request.state.request_id)
         return JSONResponse(status_code=500, content={"data": None,
             "meta": {"requestId": request.state.request_id},

@@ -20,8 +20,8 @@ FastAPI: `http://127.0.0.1:8000/api/v1`; Swagger: `http://127.0.0.1:8000/docs`; 
 py -m venv python_backend/.venv
 python_backend/.venv/Scripts/python.exe -m pip install -r python_backend/requirements.txt
 $env:PYTHONPATH="python_backend"
-python_backend/.venv/Scripts/python.exe -m alobo_api.migrate
-python_backend/.venv/Scripts/python.exe -m uvicorn alobo_api.main:app --host 127.0.0.1 --port 8000 --env-file .env
+python_backend/.venv/Scripts/python.exe -m anta_api.migrate
+python_backend/.venv/Scripts/python.exe -m uvicorn anta_api.main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
 Chỉ cấu hình R2 qua `.env`/secret manager; không đưa khóa vào Git hoặc log. FastAPI từ chối cấp URL PUT nếu thiếu S3 key. URL ký chứa quyền truy cập tạm thời, logger Android phải che tham số `X-Amz-*`.

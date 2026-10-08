@@ -80,7 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (refund.partialHours > refund.fullHours) throw new Error('REFUND_PARTIAL_HOURS cannot exceed REFUND_FULL_HOURS');
   return { databaseUrl: required('DATABASE_URL'), redisUrl: required('REDIS_URL'), jwtSecret, otpSecret, webhookSecret,
     production, devOtp, devKey, fcmEnabled: env.FCM_ENABLED === 'true', port, realtimePort,
-    corsOrigins: (env.CORS_ORIGINS || '').split(',').filter(Boolean), redisKeyPrefix: env.REDIS_KEY_PREFIX || 'alobo:', bindHost: env.BIND_HOST || '127.0.0.1',
+    corsOrigins: (env.CORS_ORIGINS || '').split(',').filter(Boolean), redisKeyPrefix: env.REDIS_KEY_PREFIX || 'anta:', bindHost: env.BIND_HOST || '127.0.0.1',
     trustedProxyHops: integer('TRUSTED_PROXY_HOPS', 0, 0, 10),
     paymentProvider, paymentReturnUrl, paymentCancelUrl, payos, vnpay, otpDelivery, smtp, twilio, refund,
     accountPurge: env.ACCOUNT_PURGE_ENABLED !== 'false' };

@@ -1,6 +1,6 @@
 # Trạng thái backend — 07/10/2026
 
-Backend là dịch vụ clone độc lập, **không phải backend Alobo gốc**. Android chưa gọi API này. OpenAPI được xuất tại [openapi.json](openapi.json). Các flow production có tiền/thông tin cá nhân vẫn cần tích hợp và nghiệm thu trước khi bật.
+Backend của app đặt sân Anta; app Android đã gọi API này cho danh sách sân, đặt sân, thanh toán sandbox, tài khoản và sân yêu thích. OpenAPI được xuất tại [openapi.json](openapi.json). Các flow production có tiền/thông tin cá nhân vẫn cần tích hợp và nghiệm thu trước khi bật.
 
 Đang có thêm bản chuyển đổi Python/FastAPI chạy song song cổng 8000: health, catalog/content, JWT phiên hiện có, hồ sơ/logout, favorites, ảnh sân R2 và runner migration chung checksum. Chưa port OTP/login/refresh, booking/payment, commerce/chat/admin, worker/realtime; bản Python chưa đủ parity để thay NestJS. Xem [python_backend/README.md](../python_backend/README.md).
 
@@ -46,7 +46,7 @@ Cùng ngày: đăng nhập Google chuyển sang kiểm trực tiếp ID token c�
 
 | Phạm vi | Việc còn lại |
 |---|---|
-| Android | Generate client từ OpenAPI, binding data, auth refresh/reconnect, test UI–API |
+| Android | Chat, thông báo đẩy, client sinh từ OpenAPI |
 | OTP và payment thực | Khóa merchant/SMTP/Twilio thật, chạy giao dịch sandbox của từng cổng, biên lai, đối soát định kỳ |
 | Đăng nhập Google | Client ID thật, account recovery và policy gộp tài khoản |
 | Account deletion | Chính sách lưu trữ pháp lý, export dữ liệu, xử lý backup |

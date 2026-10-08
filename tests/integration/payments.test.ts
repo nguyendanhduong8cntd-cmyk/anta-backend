@@ -14,7 +14,7 @@ import { IdentityService } from '../../modules/identity/service';
 import { RefundService } from '../../modules/payment/refunds';
 import { buildOpenApi } from '../../packages/contracts/openapi';
 
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://alobo:alobo_local@127.0.0.1:55432/alobo_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://anta:anta_local@127.0.0.1:55432/anta_test';
 assert.match(new URL(process.env.DATABASE_URL).pathname, /_test$/);
 process.env.NODE_ENV = 'test';
 process.env.PAYMENT_PROVIDER = 'sandbox';
@@ -23,7 +23,7 @@ process.env.DEV_OTP_ENABLED = 'true';
 process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';
 const runId = randomUUID().slice(0, 8);
-process.env.REDIS_KEY_PREFIX = `alobo-payments-${runId}:`;
+process.env.REDIS_KEY_PREFIX = `anta-payments-${runId}:`;
 const branchId = randomUUID(), yardId = randomUUID(), serviceId = randomUUID();
 const payosKey = 'payos-checksum-key-for-tests-only', vnpaySecret = 'vnpay-hash-secret-for-tests-only';
 let app: INestApplication, origin: string, base: string, pool: Pool, fakePayos: Server, payosRequests: any[] = [];
@@ -75,7 +75,7 @@ async function paidBooking(user: Account, days: number, hour: number) {
 }
 function useProvider(name: 'sandbox' | 'payos' | 'vnpay') {
   process.env.PAYMENT_PROVIDER = name;
-  process.env.PAYMENT_RETURN_URL = 'alobo://payment/return';
+  process.env.PAYMENT_RETURN_URL = 'anta://payment/return';
   process.env.PAYOS_CLIENT_ID = 'test-client'; process.env.PAYOS_API_KEY = 'test-api-key'; process.env.PAYOS_CHECKSUM_KEY = payosKey;
   process.env.PAYOS_BASE_URL = `http://127.0.0.1:${(fakePayos.address() as AddressInfo).port}`;
   process.env.VNPAY_TMN_CODE = 'TESTTMN1'; process.env.VNPAY_HASH_SECRET = vnpaySecret;

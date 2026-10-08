@@ -76,7 +76,7 @@ test('VNPay pay URL, IPN verification and refund request use HMAC-SHA512', async
   assert.deepEqual(await vnpayRefund(config, refund, http, now), { status: 'SUCCEEDED', providerRef: '888' });
   assert.deepEqual([sent.vnp_Command, sent.vnp_TransactionType, sent.vnp_Amount, sent.vnp_RequestId], ['refund', '03', '9000000', '11111111222243338444555555555555']);
   assert.equal(sent.vnp_SecureHash, createHmac('sha512', config.vnpay!.hashSecret).update(
-    `${sent.vnp_RequestId}|2.1.0|refund|TMN00001|03|100003|9000000|777|20261007100500|alobo-backend|20261007100405|127.0.0.1|booking cancelled`).digest('hex'));
+    `${sent.vnp_RequestId}|2.1.0|refund|TMN00001|03|100003|9000000|777|20261007100500|anta-backend|20261007100405|127.0.0.1|booking cancelled`).digest('hex'));
   assert.deepEqual(await vnpayRefund(config, { ...refund, providerRef: null }, http, now), { status: 'MANUAL_REVIEW' });
   assert.equal((await vnpayRefund(config, refund, (async () => new Response(JSON.stringify({ vnp_ResponseCode: '94' }))) as typeof fetch, now)).status, 'FAILED');
 });

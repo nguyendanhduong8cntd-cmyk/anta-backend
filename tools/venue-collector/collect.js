@@ -1,4 +1,4 @@
-// Collects venue listings from the public Alobo booking site by reading what the page displays (accessibility
+// Collects venue listings from the public booking site at ORIGIN by reading what the page displays (accessibility
 // tree) while browsing it like a visitor: filter by sport, open each of the nearest venues' side panel, read its tabs.
 // One page, one venue at a time. No login. The reviews tab is never opened (it carries reviewers' names).
 // usage: node collect.js <venues.json> [sport...]      -> { venues: {slug: {...}}, bySport: {sport: {slugs: [slug]}} }

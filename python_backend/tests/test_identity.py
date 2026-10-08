@@ -7,7 +7,7 @@ import psycopg
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
-from alobo_api.main import app
+from anta_api.main import app
 
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -19,7 +19,7 @@ def test_existing_jwt_profile_update_and_logout():
     with TestClient(app) as client:
         settings = app.state.settings
         token = jwt.encode({"sub": str(user_id), "sid": str(session_id),
-            "iss": "alobo-clone", "aud": "alobo-android", "iat": now, "exp": now + 900},
+            "iss": "anta", "aud": "anta-android", "iat": now, "exp": now + 900},
             settings.jwt_secret, algorithm="HS256")
         headers = {"Authorization": f"Bearer {token}"}
         with psycopg.connect(settings.database_url, autocommit=True) as db:

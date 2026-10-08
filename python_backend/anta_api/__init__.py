@@ -1,4 +1,4 @@
-"""FastAPI implementation of the Alobo clone backend (incremental port)."""
+"""FastAPI implementation of the Anta backend (incremental port)."""
 
 import asyncio
 import sys

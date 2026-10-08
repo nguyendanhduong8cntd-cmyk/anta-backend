@@ -4,9 +4,9 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from PIL import Image
 
-from alobo_api.config import Settings
-from alobo_api.core import ApiError
-from alobo_api.storage import R2Storage, sanitize_court_image
+from anta_api.config import Settings
+from anta_api.core import ApiError
+from anta_api.storage import R2Storage, sanitize_court_image
 
 
 def test_sanitize_decodes_and_reencodes_without_metadata():
@@ -27,7 +27,7 @@ def test_sanitize_rejects_disguised_svg():
 
 def test_r2_presigned_put_binds_content_type_without_network():
     settings = Settings(database_url="unused", redis_url="unused", jwt_secret="x" * 32,
-        redis_key_prefix="test:", r2_account_id="a" * 32, r2_bucket="alobo-court-images",
+        redis_key_prefix="test:", r2_account_id="a" * 32, r2_bucket="anta-court-images",
         r2_access_key_id="fake-access-key", r2_secret_access_key="fake-secret-key")
     storage = R2Storage(settings)
     url = storage.presign_put("quarantine/courts/example", "image/png")
@@ -40,7 +40,7 @@ def test_r2_presigned_put_binds_content_type_without_network():
 
 def test_r2_refuses_missing_credentials_and_untrusted_endpoint():
     base = dict(database_url="unused", redis_url="unused", jwt_secret="x" * 32,
-        redis_key_prefix="test:", r2_account_id="a" * 32, r2_bucket="alobo-court-images")
+        redis_key_prefix="test:", r2_account_id="a" * 32, r2_bucket="anta-court-images")
     with pytest.raises(ApiError):
         R2Storage(Settings(**base))
     with pytest.raises(ApiError):

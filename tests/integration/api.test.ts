@@ -25,7 +25,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { io } from 'socket.io-client';
 
 // Never run integration fixtures in the application's database.
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://alobo:alobo_local@127.0.0.1:55432/alobo_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://anta:anta_local@127.0.0.1:55432/anta_test';
 assert.match(new URL(process.env.DATABASE_URL).pathname, /_test$/);
 process.env.NODE_ENV = 'test';
 process.env.DEV_OTP_ENABLED = 'true';
@@ -36,7 +36,7 @@ for (const key of ['GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL']) delete process.env[ke
 let app: INestApplication, base: string, db: Database;
 const runId = randomUUID().slice(0, 8);
 const demoIds = { ...seedIds, branch: randomUUID(), yard: randomUUID() };
-process.env.REDIS_KEY_PREFIX = `alobo-tests-${runId}:`;
+process.env.REDIS_KEY_PREFIX = `anta-tests-${runId}:`;
 let anotherUser: any;
 let slotIndex = 0;
 function slot() {
@@ -308,7 +308,7 @@ test('worker expires holds/bookings and late payment cannot take a replacement r
 test('outbox -> BullMQ -> durable notification is deduplicated and user-scoped', async () => {
   const user = await account('notifications'), created = await booking(user.accessToken); await pay(created.intent);
   const connection = new Redis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
-  const queueName = `alobo-integration-${runId}`, queue = new Queue(queueName, { connection });
+  const queueName = `anta-integration-${runId}`, queue = new Queue(queueName, { connection });
   const worker = new Worker(queueName, job => deliverNotification(db, job.data.eventId), { connection });
   try {
     // Earlier local runs can leave more pending events than one batch; drain them all.
