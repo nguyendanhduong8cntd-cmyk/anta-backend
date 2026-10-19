@@ -1,0 +1,80 @@
+# Render Blueprint: a public demo of the API, not a production deployment.
+# NODE_ENV stays development because production refuses sandbox payment and development OTP, and no real payment or SMS
+# provider is configured yet. Email codes still go out through SMTP; the development aids need X-Dev-Key.
+# Free plan: the API sleeps after 15 idle minutes (about a minute to wake), Key Value keeps nothing across restarts,
+# and the free database expires 30 days after it is created unless upgraded.
+services:
+  - type: web
+    name: anta-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./infra/Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/scripts/render-start.js
+    healthCheckPath: /api/v1/health/ready
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: BIND_HOST
+        value: 0.0.0.0
+      # Render's proxy is the one hop in front of the API.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: CORS_ORIGINS
+        value: https://anta-backend.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: anta-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: anta-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OTP_HASH_SECRET
+        generateValue: true
+      - key: SANDBOX_WEBHOOK_SECRET
+        generateValue: true
+      - key: PAYMENT_PROVIDER
+        value: sandbox
+      - key: OTP_DELIVERY
+        value: provider
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: DEV_OTP_ENABLED
+        value: "true"
+      # The same key as anta.devKey in the Android local.properties, at least 32 characters.
+      - key: DEV_ADMIN_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        value: 330037975184-0s3vl28c31m0v8e9u4pvpflc9hr3m94k.apps.googleusercontent.com
+      # Imported on every start while set; remove it once the venues are in, so later edits are kept.
+      - key: SEED_VENUES_FILE
+        value: data/venues/hcm.json
+  - type: keyvalue
+    name: anta-redis
+    plan: free
+    region: singapore
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: anta-db
+    plan: free
+    region: singapore
+    databaseName: anta
+    user: anta
+    postgresMajorVersion: "16"
+    ipAllowList: []
