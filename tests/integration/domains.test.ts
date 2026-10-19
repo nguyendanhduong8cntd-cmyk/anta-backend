@@ -14,7 +14,9 @@ process.env.NODE_ENV = 'test';
 process.env.DEV_OTP_ENABLED = 'true';
 process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';
-for (const key of ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL']) delete process.env[key];
+// Codes stay on this machine whatever the developer's .env holds: no SMTP, SMS or push from these tests.
+process.env.OTP_DELIVERY = 'development';
+for (const key of ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL', 'OTP_DEV_PUSH']) delete process.env[key];
 const runId = randomUUID().slice(0, 8);
 process.env.REDIS_KEY_PREFIX = `anta-domains-${runId}:`;
 const branchId = randomUUID();

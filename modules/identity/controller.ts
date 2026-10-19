@@ -8,7 +8,8 @@ import { IdentityService } from './service';
 @Controller()
 export class IdentityController {
   constructor(private readonly identity: IdentityService) {}
-  @Public() @Post('public/auth/otp/send') send(@Body() dto: OtpSendDto, @Req() req: AuthRequest) { return this.identity.sendOtp(dto, req.ip || 'unknown'); }
+  @Public() @Post('public/auth/otp/send') @ApiHeader({ name: 'X-Dev-Key', required: false, description: 'Development backends only' })
+  send(@Body() dto: OtpSendDto, @Req() req: AuthRequest, @Headers('x-dev-key') key?: string) { return this.identity.sendOtp(dto, req.ip || 'unknown', key); }
   @Public() @Post('public/auth/otp/verify') verify(@Body() dto: OtpVerifyDto) { return this.identity.verifyOtp(dto.challengeId, dto.code); }
   @Public() @Post('public/auth/register') register(@Body() dto: RegisterDto) { return this.identity.register(dto); }
   @Public() @Post('public/auth/login') login(@Body() dto: LoginDto, @Req() req: AuthRequest) { return this.identity.login(dto, req.ip || 'unknown'); }

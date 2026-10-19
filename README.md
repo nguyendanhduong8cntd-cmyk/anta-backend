@@ -83,6 +83,13 @@ Bản debug của app Android không có secret webhook nên dùng đường ri�
 
 `GET /bookings/{id}` phải trả `CONFIRMED`. Redirect/UI không được tự xác nhận paid. Hủy booking đã trả tiền hoàn theo chính sách: trước giờ chơi từ 24 giờ hoàn 100%, từ 2 đến dưới 24 giờ hoàn 50%, dưới 2 giờ từ chối với `CANCELLATION_WINDOW_CLOSED` (chỉnh bằng `REFUND_*`).
 
+## Gửi mã xác thực
+
+- **Email thật qua Gmail.** Bật xác minh 2 bước cho tài khoản Gmail, tạo App Password tại https://myaccount.google.com/apppasswords, rồi đặt trong `.env`: `OTP_DELIVERY=provider`, `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<địa chỉ Gmail>`, `SMTP_PASS=<App Password 16 ký tự, bỏ dấu cách>`, `SMTP_FROM=Anta <địa chỉ Gmail>`. Gmail cho gửi khoảng 500 thư mỗi ngày. Không đưa App Password vào Git, app hay chat.
+- **Số điện thoại** cần Twilio (`TWILIO_*`). Chưa có thì ở development (`DEV_OTP_ENABLED=true`) mã vẫn được tạo, lấy bằng `GET /dev/otp/{challengeId}` hoặc nhận qua thông báo đẩy bên dưới; production trả `OTP_CHANNEL_UNAVAILABLE`.
+- **Thông báo đẩy cho bản dev** (`OTP_DEV_PUSH=true`): app debug gửi kèm header `X-Dev-Key` và FCM token (`fcmToken`) trong `POST /public/auth/otp/send`, backend đẩy mã về chính điện thoại đó. Chỉ áp dụng cho mã không gửi được qua kênh thật, như số điện thoại khi chưa có Twilio: mã đã gửi qua email thì chỉ đọc được trong hộp thư, cả `GET /dev/otp` cũng trả 404, giống production. Việc đẩy mã không chứng minh ai sở hữu số điện thoại hay email, nên chỉ chạy khi có dev key và bị chặn ở production. Cần file service account có quyền gửi FCM tại `secrets/firebase-service-account.json` (thư mục bị Git và Docker build bỏ qua; container đọc nó ở `/run/secrets/anta`).
+- Các integration test luôn chạy với `OTP_DELIVERY=development`, riêng `otp-delivery.test.ts` dùng transport giả, nên không gửi thư thật dù `.env` có Gmail.
+
 ## Danh sách sân
 
 `GET /public/branches` nhận `lat`, `lng`, `radius` (mét, tối đa 20.100.000 — nửa chu vi Trái Đất, để "gần nhất trước" luôn có kết quả dù người dùng ở đâu), `sportId`, `q`, `sort`, `page`, `pageSize`.
