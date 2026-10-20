@@ -60,7 +60,7 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID
         value: 330037975184-0s3vl28c31m0v8e9u4pvpflc9hr3m94k.apps.googleusercontent.com
-      # Imported on every start while set; remove it once the venues are in, so later edits are kept.
+      # Imported when the catalog is empty: on the first start, and again after the free database is replaced.
       - key: SEED_VENUES_FILE
         value: data/venues/hcm.json
       # The import refuses a database that is not local unless told: the venues' owners agreed to this public demo.
