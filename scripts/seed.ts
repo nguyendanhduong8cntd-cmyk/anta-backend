@@ -21,5 +21,5 @@ export async function seed(pool: Pool) {
 if (require.main === module) {
   if (process.env.NODE_ENV === 'production') throw new Error('Demo seed is blocked in production');
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  seed(pool).then(() => pool.end()).catch(async () => { console.error('Demo seed failed.'); await pool.end(); process.exitCode = 1; });
+  seed(pool).then(() => pool.end()).catch(async error => { console.error(`Demo seed failed: ${error instanceof Error ? error.message : 'unknown error'}`); await pool.end(); process.exitCode = 1; });
 }

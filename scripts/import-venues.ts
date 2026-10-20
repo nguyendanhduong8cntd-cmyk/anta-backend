@@ -147,9 +147,14 @@ export function isImportable(venue: Venue) {
     && typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
     && (venue.priceTables || []).every(table => Array.isArray(table?.rows));
 }
-/** The import only ever targets a developer's own database. */
+/** A developer's own database: on this machine or in the local Docker setup. */
 export function isLocalDatabase(url: string | undefined) {
   try { return LOCAL_HOSTS.includes(new URL(url || '').hostname); } catch { return false; }
+}
+/** The venues may go to a developer's own database, or to a public demo whose owner has confirmed that the venues'
+ *  permission covers being shown there (ALLOW_PUBLIC_VENUE_IMPORT=true). Never to production. */
+export function importAllowed(env: NodeJS.ProcessEnv) {
+  return env.NODE_ENV !== 'production' && (isLocalDatabase(env.DATABASE_URL) || env.ALLOW_PUBLIC_VENUE_IMPORT === 'true');
 }
 /** A venue's photos, cover first, exactly as the source lists them. They are its thumbnails on purpose: the
  *  full-size originals do not exist for covers and run to 13 MB each for gallery photos. */
@@ -219,7 +224,7 @@ export async function importVenues(pool: Pool, data: VenueFile) {
 
 if (require.main === module) {
   const file = process.argv[2];
-  if (process.env.NODE_ENV === 'production' || !isLocalDatabase(process.env.DATABASE_URL)) throw new Error('Venue import only runs against a local development database');
+  if (!importAllowed(process.env)) throw new Error('Venue import only runs against a local development database, or a public demo with ALLOW_PUBLIC_VENUE_IMPORT=true');
   if (!file) throw new Error('Usage: npm run db:import-venues -- <venues.json>');
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   readFile(file, 'utf8').then(text => importVenues(pool, JSON.parse(text) as VenueFile))

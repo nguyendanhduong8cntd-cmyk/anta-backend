@@ -68,7 +68,7 @@ Dừng app bằng `docker compose -f infra/compose.yaml --profile app stop`. Kh�
 `render.yaml` là Blueprint gói free ở Singapore: một web service Docker, một Postgres 16, một Key Value. Tạo bằng Dashboard: **New > Blueprint**, chọn repo này, điền các biến `sync: false` (`SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `DEV_ADMIN_KEY`) rồi **Apply**. Mỗi commit lên `main` tự deploy lại.
 
 - Đây là bản demo, `NODE_ENV=development`: thanh toán sandbox, mã email gửi thật qua SMTP, mã của số điện thoại lấy bằng `X-Dev-Key`. Không dùng cho khách thật.
-- Gói free không có worker riêng và không chạy lệnh một lần, nên `scripts/render-start.ts` migrate, nạp sân khi có `SEED_VENUES_FILE`, rồi chạy API và worker trong cùng container. Nạp xong thì xoá biến `SEED_VENUES_FILE` để lần khởi động sau không ghi đè sân và giá.
+- Gói free không có worker riêng và không chạy lệnh một lần, nên `scripts/render-start.ts` migrate, nạp sân khi có `SEED_VENUES_FILE`, rồi chạy API và worker trong cùng container. Nạp xong thì xoá biến `SEED_VENUES_FILE` để lần khởi động sau không ghi đè sân và giá. Script nạp sân chỉ ghi vào database không nằm trên máy khi có `ALLOW_PUBLIC_VENUE_IMPORT=true`.
 - API ngủ sau 15 phút không có request, lần gọi đầu mất khoảng một phút. Key Value không giữ dữ liệu khi khởi động lại. Database free hết hạn sau 30 ngày nếu không nâng cấp.
 - App Android debug trỏ vào Render bằng `anta.debugApiUrl=https://anta-backend.onrender.com/api/v1` trong `local.properties`; bản release dùng `-Panta.apiUrl=...`.
 

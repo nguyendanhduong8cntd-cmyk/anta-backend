@@ -63,6 +63,9 @@ services:
       # Imported on every start while set; remove it once the venues are in, so later edits are kept.
       - key: SEED_VENUES_FILE
         value: data/venues/hcm.json
+      # The import refuses a database that is not local unless told: the venues' owners agreed to this public demo.
+      - key: ALLOW_PUBLIC_VENUE_IMPORT
+        value: "true"
   - type: keyvalue
     name: anta-redis
     plan: free
