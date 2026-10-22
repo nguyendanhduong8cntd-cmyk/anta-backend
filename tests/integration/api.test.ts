@@ -11,6 +11,8 @@ import { RedisService } from '../../packages/redis';
 import { BookingService } from '../../modules/booking/service';
 import { PaymentService } from '../../modules/payment/service';
 import { signWebhook } from '../../modules/payment/signature';
+import { signAccess } from '../../packages/auth/tokens';
+import { loadConfig } from '../../packages/config';
 import { migrate } from '../../scripts/migrate';
 import { demoIds as seedIds, seed } from '../../scripts/seed';
 import { importVenues, Venue } from '../../scripts/import-venues';
@@ -40,6 +42,7 @@ const runId = randomUUID().slice(0, 8);
 const demoIds = { ...seedIds, branch: randomUUID(), yard: randomUUID() };
 process.env.REDIS_KEY_PREFIX = `anta-tests-${runId}:`;
 let anotherUser: any;
+let ownerAccount: any;
 let slotIndex = 0;
 function slot() {
   const date = new Date(); date.setUTCDate(date.getUTCDate() + 2 + slotIndex++);
@@ -79,6 +82,24 @@ async function pay(intent: any, eventId = randomUUID(), overrides: Record<string
   return request('/webhooks/payments/sandbox', 'POST', body, undefined, { 'X-Webhook-Timestamp': timestamp,
     'X-Webhook-Signature': signWebhook(Buffer.from(JSON.stringify(body)), timestamp, process.env.SANDBOX_WEBHOOK_SECRET!) });
 }
+/** Creates a fixture user with a live session directly in the database (a signed, session-bound access token,
+ * identical in shape to one issued through login), bypassing the public OTP/register flow so test fixtures don't
+ * compete with real registration traffic for the per-IP OTP-send rate limit. */
+async function directAccount(pool: Pool, suffix: string) {
+  const userId = randomUUID(), sessionId = randomUUID();
+  await pool.query(`INSERT INTO identity.users(id,identifier,display_name,password_hash) VALUES($1,$2,$3,'unused-fixture-hash')`,
+    [userId, `${runId}-${suffix}@example.com`, `Fixture ${suffix}`]);
+  await pool.query(`INSERT INTO identity.refresh_sessions(id,user_id,family_id,refresh_hash,device_id,expires_at)
+    VALUES($1,$2,$3,$4,'test-device',now()+interval '1 day')`, [sessionId, userId, randomUUID(), randomUUID()]);
+  const accessToken = await signAccess(userId, sessionId, loadConfig().jwtSecret);
+  return { user: { id: userId }, accessToken, identifier: `${runId}-${suffix}@example.com` };
+}
+/** The venue owner confirms a booking that is awaiting review after payment. */
+async function confirmAsOwner(bookingId: string) {
+  const result = await request(`/owner/bookings/${bookingId}/confirm`, 'POST', undefined, ownerAccount.accessToken);
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  return result.body.data;
+}
 before(async () => {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   await migrate(pool); await seed(pool);
@@ -86,9 +107,11 @@ before(async () => {
     SELECT $1,shop_id,name,address,description,location,timezone,opening_hour,closing_hour FROM catalog.branches WHERE id=$2`, [demoIds.branch, seedIds.branch]);
   await pool.query(`INSERT INTO catalog.yards(id,branch_id,sport_id,name,hourly_price,currency)
     SELECT $1,$2,sport_id,name,hourly_price,currency FROM catalog.yards WHERE id=$3`, [demoIds.yard, demoIds.branch, seedIds.yard]);
-  await pool.end();
   app = await createApplication(); await app.listen(0, '127.0.0.1');
   base = `${await app.getUrl()}/api/v1`; db = app.get(Database);
+  ownerAccount = await directAccount(pool, 'owner');
+  await pool.query("INSERT INTO identity.roles(user_id,role,branch_id) VALUES($1,'branch_owner',$2)", [ownerAccount.user.id, demoIds.branch]);
+  await pool.end();
 });
 after(async () => { await app?.close(); });
 
@@ -260,7 +283,8 @@ test('booking and payment retry return the same records; ownership and payload h
   assert.deepEqual([paid.status, paid.body.data.outcome, paid.body.data.duplicate], [200, 'SUCCEEDED', false]);
   assert.equal((await request(devPay, 'POST', undefined, a.accessToken, devKey)).body.data.duplicate, true);
   const confirmed = (await request(`/bookings/${id}`, 'GET', undefined, a.accessToken)).body.data;
-  assert.deepEqual([confirmed.status, confirmed.branch_name, confirmed.yard_name], ['CONFIRMED', 'Sân cầu lông Demo', 'Sân 1']);
+  // Payment success moves the booking to owner review, not straight to CONFIRMED.
+  assert.deepEqual([confirmed.status, confirmed.branch_name, confirmed.yard_name], ['PENDING_OWNER_CONFIRMATION', 'Sân cầu lông Demo', 'Sân 1']);
   // An intent that is no longer waiting is refused instead of being filed as a late payment.
   await db.query("UPDATE payment.intents SET status='EXPIRED' WHERE id=$1", [payments[0].body.data.id]);
   const late = await request(devPay, 'POST', undefined, a.accessToken, devKey);
@@ -276,13 +300,41 @@ test('only signed webhook confirms; replay dedupe and amount checks preserve sta
   const duplicate = await pay(created.intent, eventId); assert.equal(duplicate.body.data.duplicate, true);
   assert.equal((await pay(created.intent, randomUUID())).body.data.outcome, 'SUCCEEDED');
   assert.equal((await db.query('SELECT count(*)::int AS n FROM payment.transactions WHERE intent_id=$1', [created.intent.id])).rows[0].n, 1);
-  assert.equal((await request(`/bookings/${created.booking.id}`, 'GET', undefined, user.accessToken)).body.data.status, 'CONFIRMED');
+  // Payment success moves the booking to owner review, not straight to CONFIRMED.
+  assert.equal((await request(`/bookings/${created.booking.id}`, 'GET', undefined, user.accessToken)).body.data.status, 'PENDING_OWNER_CONFIRMATION');
   const q = new URLSearchParams({ from: created.target.startsAt, to: created.target.endsAt });
   const availability = await request(`/public/branches/${demoIds.branch}/availability?${q}`); assert.equal(availability.body.data[0].available, false);
   // A paid booking is cancellable under the refund policy; the refund is recorded against the settled intent.
   const paidCancel = await request(`/bookings/${created.booking.id}/cancel`, 'POST', undefined, user.accessToken, key());
   assert.deepEqual([paidCancel.status, paidCancel.body.data.status, paidCancel.body.data.refund?.status], [201, 'CANCELLED', 'SUCCEEDED']);
   assert.equal((await request(`/public/branches/${demoIds.branch}/availability?${q}`)).body.data[0].available, true);
+});
+test('owner portal: confirm and reject require branch ownership, and reject always refunds in full', async () => {
+  const user = await account('owner-flow'), created = await booking(user.accessToken);
+  assert.equal((await pay(created.intent)).body.data.outcome, 'SUCCEEDED');
+  const bookingId = created.booking.id;
+  // A customer (not an owner/staff of the branch) cannot confirm or reject.
+  assert.equal((await request(`/owner/bookings/${bookingId}/confirm`, 'POST', undefined, user.accessToken)).status, 403);
+  // Not yet staff of any branch.
+  assert.equal((await request(`/owner/bookings/${bookingId}`, 'GET', undefined, anotherUser.accessToken)).status, 403);
+  const confirmed = await confirmAsOwner(bookingId);
+  assert.equal(confirmed.status, 'CONFIRMED');
+  assert.equal((await request(`/bookings/${bookingId}`, 'GET', undefined, user.accessToken)).body.data.status, 'CONFIRMED');
+  // Already confirmed: a second confirm is refused, not silently repeated.
+  const again = await request(`/owner/bookings/${bookingId}/confirm`, 'POST', undefined, ownerAccount.accessToken);
+  assert.deepEqual([again.status, again.body.error.code], [409, 'BOOKING_NOT_CONFIRMABLE']);
+
+  // A second booking, rejected instead: always a full refund, regardless of how close the slot is.
+  const second = await booking(user.accessToken);
+  assert.equal((await pay(second.intent)).body.data.outcome, 'SUCCEEDED');
+  const emptyReason = await request(`/owner/bookings/${second.booking.id}/reject`, 'POST', { reason: '  ' }, ownerAccount.accessToken);
+  assert.equal(emptyReason.status, 400);
+  const rejected = await request(`/owner/bookings/${second.booking.id}/reject`, 'POST', { reason: 'Mưa to, sân ngập nước' }, ownerAccount.accessToken);
+  assert.equal(rejected.status, 200, JSON.stringify(rejected.body));
+  assert.deepEqual([rejected.body.data.status, rejected.body.data.refund.percent, rejected.body.data.refund.status], ['CANCELLED', 100, 'SUCCEEDED']);
+  assert.equal((await request(`/bookings/${second.booking.id}`, 'GET', undefined, user.accessToken)).body.data.status, 'CANCELLED');
+  // A rejected/confirmed booking cannot be rejected again.
+  assert.equal((await request(`/owner/bookings/${second.booking.id}/reject`, 'POST', { reason: 'again' }, ownerAccount.accessToken)).status, 409);
 });
 test('cancel is idempotent and releases the slot without letting late payment resurrect it', async () => {
   const user = await account('cancel'), created = await booking(user.accessToken);

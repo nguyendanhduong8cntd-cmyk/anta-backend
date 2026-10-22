@@ -9,12 +9,18 @@ import { loadConfig } from '../../packages/config';
 import { parseCursor } from '../../apps/realtime/main';
 const secret = 'unit-test-secret-with-more-than-32-characters';
 test('booking state machine prevents terminal state reversal', () => {
-  assert.doesNotThrow(() => assertTransition('PENDING_PAYMENT', 'CONFIRMED'));
+  // Payment success moves a booking to owner review, not straight to CONFIRMED; only the owner (or the
+  // confirmation deadline elapsing) can move it on from there.
+  assert.doesNotThrow(() => assertTransition('PENDING_PAYMENT', 'PENDING_OWNER_CONFIRMATION'));
+  assert.throws(() => assertTransition('PENDING_PAYMENT', 'CONFIRMED'));
+  assert.doesNotThrow(() => assertTransition('PENDING_OWNER_CONFIRMATION', 'CONFIRMED'));
+  assert.doesNotThrow(() => assertTransition('PENDING_OWNER_CONFIRMATION', 'CANCELLED'));
   for (const status of ['CONFIRMED', 'CANCELLED', 'EXPIRED'] as const) assert.throws(() => assertTransition(status, 'PENDING_PAYMENT'));
   // A paid booking may only move to CANCELLED (with a refund); every other exit from a terminal state is refused.
   assert.doesNotThrow(() => assertTransition('CONFIRMED', 'CANCELLED'));
   assert.throws(() => assertTransition('CONFIRMED', 'EXPIRED'));
   assert.throws(() => assertTransition('CANCELLED', 'CONFIRMED'));
+  assert.throws(() => assertTransition('PENDING_OWNER_CONFIRMATION', 'EXPIRED'));
 });
 test('slot interval validation and integer pricing duration', () => {
   const now = Date.parse('2026-09-28T00:00:00Z');

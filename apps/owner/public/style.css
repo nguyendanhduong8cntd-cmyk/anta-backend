@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap');
+:root {
+  --primary: #0A93A3; --green: #3FAE3A; --orange: #E07A10; --text: #0F2533;
+  --bg: #f4f7f8; --card: #fff; --muted: #64748b; --line: #e2e8ec; --danger: #c0392b;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0e1518; --card: #141d21; --text: #e7eef0; --muted: #8fa3ab; --line: #263238; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 'Be Vietnam Pro', system-ui, sans-serif; }
+[hidden] { display: none !important; }
+a { color: var(--primary); }
+button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--primary); background: var(--primary); color: #fff; cursor: pointer; }
+button.ghost { background: none; color: var(--text); border-color: var(--line); }
+button.danger { background: none; color: var(--danger); border-color: var(--danger); }
+button.small { padding: 4px 10px; font-size: 12px; }
+button:disabled { opacity: .5; cursor: default; }
+input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; }
+label { display: block; color: var(--muted); font-size: 12px; }
+
+/* ---- login ---- */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; }
+.login-card { width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+.login-card h1 { font-size: 20px; margin: 0 0 4px; }
+.login-card form label { margin: 14px 0 0; }
+.login-card .error { color: var(--danger); min-height: 1.4em; margin-top: 10px; }
+.login-card button[type="submit"] { width: 100%; margin-top: 18px; }
+
+/* ---- shell: sidebar + main ---- */
+#app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+aside { background: var(--card); border-right: 1px solid var(--line); padding: 16px 14px; display: flex; flex-direction: column; gap: 18px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--primary); font-size: 16px; }
+.branch-pick select { font-size: 13px; }
+.nav-group { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 4px; }
+nav.side { display: flex; flex-direction: column; gap: 2px; }
+nav.side button { all: unset; cursor: pointer; padding: 8px 10px; border-radius: 8px; color: var(--text); font-size: 14px; display: flex; justify-content: space-between; }
+nav.side button[aria-current="page"] { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-weight: 600; }
+nav.side button .badge { background: var(--orange); color: #fff; border-radius: 99px; font-size: 11px; padding: 0 6px; }
+.who-box { margin-top: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.who-box .who-name { font-weight: 600; }
+.who-box .who-role { color: var(--muted); font-size: 12px; display: block; }
+
+main { padding: 18px 22px; min-width: 0; }
+.page-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.page-head h2 { margin: 0; font-size: 20px; }
+.page-head .sub { color: var(--muted); font-size: 13px; }
+.notice { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); margin-bottom: 12px; }
+.notice.bad { border-color: var(--danger); color: var(--danger); }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.stat b { display: block; font-size: 24px; }
+.stat span { color: var(--muted); font-size: 12px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 14px; }
+.toolbar label { min-width: 140px; }
+.toolbar button { align-self: flex-end; }
+
+.table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+tr:last-child td { border-bottom: 0; }
+td.wrap { white-space: normal; max-width: 320px; }
+
+.tag { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; border: 1px solid var(--line); white-space: nowrap; }
+.tag.pending { color: var(--orange); border-color: var(--orange); }
+.tag.wait { color: #b45309; border-color: #b45309; background: #fff7ed; }
+.tag.ok { color: var(--green); border-color: var(--green); }
+.tag.playing { color: var(--primary); border-color: var(--primary); }
+.tag.bad { color: var(--danger); border-color: var(--danger); }
+.tag.locked { color: var(--muted); border-color: var(--muted); }
+
+/* ---- schedule grid ---- */
+.schedule-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.date-nav { display: flex; gap: 6px; align-items: center; }
+.date-nav .current-date { font-weight: 600; min-width: 190px; text-align: center; }
+.sport-tabs { display: flex; gap: 6px; }
+.sport-tabs button { background: none; border: 1px solid var(--line); color: var(--text); }
+.sport-tabs button[aria-current="page"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+.schedule-grid-wrap { overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.schedule-grid { display: grid; min-width: max-content; }
+.schedule-grid .court-head { position: sticky; top: 0; background: var(--card); z-index: 2; padding: 10px 6px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); text-align: center; }
+.schedule-grid .court-head .sport { display: block; color: var(--muted); font-size: 11px; }
+.schedule-grid .time-label { position: sticky; left: 0; background: var(--card); z-index: 1; padding: 4px 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); text-align: right; }
+.schedule-grid .corner { position: sticky; left: 0; top: 0; background: var(--card); z-index: 3; }
+.schedule-grid .cell { border-top: 1px solid var(--line); border-left: 1px solid var(--line); position: relative; min-width: 150px; height: 46px; }
+.booking-card { position: absolute; inset: 1px 3px; border-radius: 6px; padding: 3px 6px; font-size: 11.5px; overflow: hidden; cursor: pointer; border: 1px solid transparent; line-height: 1.25; text-align: left; }
+.booking-card b { display: block; font-size: 12px; }
+.booking-card.pending { background: #fff1e0; border-color: var(--orange); color: #92400e; }
+.booking-card.wait { background: #fff7ed; border-color: #b45309; color: #7c2d12; }
+.booking-card.confirmed { background: #eaf7ea; border-color: var(--green); color: #1e5e1a; }
+.booking-card.locked { background: #eef1f3; border-color: var(--muted); color: #475569; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 14px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* ---- detail layout ---- */
+.detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+.detail-grid .card + .card { margin-top: 16px; }
+dl.rows { display: grid; grid-template-columns: 160px 1fr; gap: 6px 10px; margin: 0; }
+dl.rows dt { color: var(--muted); }
+dl.rows dd { margin: 0; }
+.cost-table td:last-child, .cost-table th:last-child { text-align: right; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.countdown { font-weight: 600; color: var(--orange); }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15,37,51,.45); display: grid; place-items: center; z-index: 10; }
+.modal { background: var(--card); border-radius: 14px; padding: 20px; width: 420px; max-width: calc(100vw - 32px); }
+.modal h3 { margin-top: 0; }
+.modal .actions { margin-top: 16px; justify-content: flex-end; }
+
+@media (max-width: 900px) {
+  #app { grid-template-columns: 1fr; }
+  aside { flex-direction: row; flex-wrap: wrap; }
+  .detail-grid { grid-template-columns: 1fr; }
+}
