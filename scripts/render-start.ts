@@ -20,6 +20,9 @@ async function main() {
     await finished(node('dist/scripts/seed.js'));
     await finished(node('dist/scripts/import-venues.js', [venues]));
   }
+  // The first admin, once its account has signed up; nothing happens while the database has an admin.
+  const admin = process.env.BOOTSTRAP_ADMIN_IDENTIFIER;
+  if (admin) await finished(node('dist/scripts/bootstrap-admin.js', [admin]));
   const children = [node('dist/apps/api/main.js'), node('dist/apps/worker/main.js')];
   let stopping = false;
   for (const child of children) child.on('exit', code => {

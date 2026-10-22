@@ -66,6 +66,9 @@ services:
       # The import refuses a database that is not local unless told: the venues' owners agreed to this public demo.
       - key: ALLOW_PUBLIC_VENUE_IMPORT
         value: "true"
+      # Becomes the first admin at the next start after it signs up in the app; ignored once there is an admin.
+      - key: BOOTSTRAP_ADMIN_IDENTIFIER
+        value: "+84900000000"
   - type: keyvalue
     name: anta-redis
     plan: free

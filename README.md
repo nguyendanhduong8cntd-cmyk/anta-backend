@@ -141,7 +141,7 @@ URL GET là bearer URL hết hạn sau 10 phút; client phải tải lại catal
 
 Dữ liệu seed là **sân demo**, không phải chi nhánh thật: sport `10000000-0000-4000-8000-000000000001`, branch `30000000-0000-4000-8000-000000000001`, yard `40000000-0000-4000-8000-000000000001`, giá 180.000 VND/giờ. Seed không tạo admin hay tài khoản với mật khẩu mặc định.
 
-Sau khi đăng ký tài khoản quản trị và xác minh quyền sở hữu qua quy trình vận hành ngoài API, người có quyền truy cập database có thể bootstrap admin đầu tiên bằng `INSERT INTO identity.roles(user_id,role) VALUES('<verified-user-uuid>','admin')`. Không chạy câu lệnh này với UUID chưa xác minh hoặc trong client Android. Các role tiếp theo cấp/thu hồi qua `/api/v1/admin/roles`, ghi audit.
+Sau khi đăng ký tài khoản quản trị và xác minh quyền sở hữu qua quy trình vận hành ngoài API, người có quyền truy cập database có thể bootstrap admin đầu tiên bằng `INSERT INTO identity.roles(user_id,role) VALUES('<verified-user-uuid>','admin')`. Không chạy câu lệnh này với UUID chưa xác minh hoặc trong client Android. Các role tiếp theo cấp/thu hồi qua `/api/v1/admin/roles`, ghi audit. Không có quyền vào database (ví dụ Render gói free) thì dùng `scripts/bootstrap-admin.ts`: nó chỉ cấp admin cho một tài khoản đã đăng ký và đang hoạt động, khi database chưa có admin nào, và ghi audit `admin.bootstrap`. Trên máy: `node --env-file=.env dist/scripts/bootstrap-admin.js <email hoặc +84...>`; trên Render: đặt `BOOTSTRAP_ADMIN_IDENTIFIER`, script chạy ở lần khởi động sau.
 
 ## Tích hợp thật
 
