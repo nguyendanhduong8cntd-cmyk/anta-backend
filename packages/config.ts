@@ -13,6 +13,8 @@ export interface Config {
   twilio?: { accountSid: string; authToken: string; from: string };
   refund: { fullHours: number; partialHours: number; partialPercent: number; orderHours: number };
   accountPurge: boolean;
+  /** Hours a venue owner has to confirm or reject a paid booking before it self-cancels with a full refund. */
+  ownerConfirmWindowHours: number;
 }
 /** OAuth client IDs whose Google sign-ins are accepted (GOOGLE_CLIENT_ID, comma separated). Apps are told the first. */
 export function googleClientIds(env: NodeJS.ProcessEnv = process.env) {
@@ -78,10 +80,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const refund = { fullHours: integer('REFUND_FULL_HOURS', 24, 0, 720), partialHours: integer('REFUND_PARTIAL_HOURS', 2, 0, 720),
     partialPercent: integer('REFUND_PARTIAL_PERCENT', 50, 1, 100), orderHours: integer('REFUND_ORDER_HOURS', 24, 0, 720) };
   if (refund.partialHours > refund.fullHours) throw new Error('REFUND_PARTIAL_HOURS cannot exceed REFUND_FULL_HOURS');
+  const ownerConfirmWindowHours = integer('OWNER_CONFIRM_WINDOW_HOURS', 2, 1, 168);
   return { databaseUrl: required('DATABASE_URL'), redisUrl: required('REDIS_URL'), jwtSecret, otpSecret, webhookSecret,
     production, devOtp, devKey, fcmEnabled: env.FCM_ENABLED === 'true', port, realtimePort,
     corsOrigins: (env.CORS_ORIGINS || '').split(',').filter(Boolean), redisKeyPrefix: env.REDIS_KEY_PREFIX || 'anta:', bindHost: env.BIND_HOST || '127.0.0.1',
     trustedProxyHops: integer('TRUSTED_PROXY_HOPS', 0, 0, 10),
     paymentProvider, paymentReturnUrl, paymentCancelUrl, payos, vnpay, otpDelivery, smtp, twilio, refund,
-    accountPurge: env.ACCOUNT_PURGE_ENABLED !== 'false' };
+    accountPurge: env.ACCOUNT_PURGE_ENABLED !== 'false', ownerConfirmWindowHours };
 }

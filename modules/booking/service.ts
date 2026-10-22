@@ -3,6 +3,8 @@ import { DbClient, Database } from '../../packages/database';
 import { Idempotency } from '../../packages/idempotency';
 import { emitEvent } from '../../packages/events';
 import { invariant } from '../../packages/contracts/errors';
+import { loadConfig } from '../../packages/config';
+import { AccessService } from '../../packages/access';
 import { CatalogService } from '../catalog/service';
 import { bookingRefundPercent, RefundService } from '../payment/refunds';
 import { assertTransition, BookingStatus, validateSlot } from './domain';
@@ -13,7 +15,7 @@ const BOOKING_VIEW = `k.*,b.name AS branch_name,b.address AS branch_address,b.ti
 @Injectable()
 export class BookingService {
   constructor(private readonly db: Database, private readonly catalog: CatalogService, private readonly idem: Idempotency,
-    private readonly refunds: RefundService) {}
+    private readonly refunds: RefundService, private readonly access: AccessService) {}
   async quote(dto: SlotDto, tx: DbClient = this.db.pool) {
     const slot = validateSlot(dto.startsAt, dto.endsAt);
     const yard = await this.catalog.yard(tx, dto.yardId);
@@ -135,13 +137,65 @@ export class BookingService {
     await this.catalog.yard(tx, ref.yard_id, true);
     return (await tx.query('SELECT * FROM booking.bookings WHERE id=$1 FOR UPDATE', [id])).rows[0];
   }
+  /** Payment success no longer confirms the slot outright: the venue owner must confirm or reject within the window. */
   async confirm(tx: DbClient, row: any, requestId: string) {
     const valid = row.status === 'PENDING_PAYMENT' && row.payment_expires_at.getTime() > Date.now();
     if (!valid) return false;
     const reservation = await tx.query('UPDATE booking.reservations SET expires_at=NULL WHERE booking_id=$1 AND active RETURNING id', [row.id]);
     invariant(reservation.rowCount, 'RESERVATION_MISSING', 'Reservation is unavailable');
-    await this.transition(tx, row, 'CONFIRMED', 'signed payment webhook', undefined, requestId);
+    const deadline = new Date(Date.now() + loadConfig().ownerConfirmWindowHours * 3600000);
+    await tx.query('UPDATE booking.bookings SET confirm_deadline_at=$2 WHERE id=$1', [row.id, deadline]);
+    row.confirm_deadline_at = deadline;
+    await this.transition(tx, row, 'PENDING_OWNER_CONFIRMATION', 'signed payment webhook', undefined, requestId);
     return true;
+  }
+  /** Owner-facing lock: no user filter, caller checks branch ownership from the loaded row. Mirrors `lock`. */
+  async lockAny(tx: DbClient, id: string) {
+    const ref = (await tx.query('SELECT yard_id FROM booking.bookings WHERE id=$1', [id])).rows[0];
+    invariant(ref, 'NOT_FOUND', 'Booking not found', 404);
+    await this.catalog.yard(tx, ref.yard_id, true);
+    return (await tx.query('SELECT * FROM booking.bookings WHERE id=$1 FOR UPDATE', [id])).rows[0];
+  }
+  async ownerConfirm(ownerId: string, id: string, requestId: string) {
+    return this.db.transaction(async tx => {
+      const row = await this.lockAny(tx, id);
+      await this.access.staff(ownerId, row.branch_id, tx);
+      invariant(row.status === 'PENDING_OWNER_CONFIRMATION', 'BOOKING_NOT_CONFIRMABLE', 'Booking is not awaiting confirmation');
+      invariant(row.confirm_deadline_at && row.confirm_deadline_at.getTime() > Date.now(),
+        'CONFIRMATION_WINDOW_CLOSED', 'The confirmation window has elapsed');
+      await this.transition(tx, row, 'CONFIRMED', 'owner confirmed', ownerId, requestId);
+      await this.access.audit(tx, ownerId, 'booking.owner_confirm', 'booking', id, requestId);
+      return row;
+    });
+  }
+  async ownerReject(ownerId: string, id: string, reason: string, requestId: string) {
+    invariant(reason.length >= 1 && reason.length <= 500, 'VALIDATION_FAILED', 'Rejection reason is required', 400);
+    return this.db.transaction(async tx => {
+      const row = await this.lockAny(tx, id);
+      await this.access.staff(ownerId, row.branch_id, tx);
+      invariant(row.status === 'PENDING_OWNER_CONFIRMATION', 'BOOKING_NOT_CONFIRMABLE', 'Booking is not awaiting confirmation');
+      await this.transition(tx, row, 'CANCELLED', `owner rejected: ${reason}`, ownerId, requestId);
+      await tx.query('UPDATE booking.reservations SET active=false WHERE booking_id=$1', [id]);
+      // Rejection is an operational failure of the venue, not a customer cancellation: always a full refund.
+      const refund = await this.refunds.request(tx, 'booking', id, 100, 'owner rejected booking', requestId);
+      await this.access.audit(tx, ownerId, 'booking.owner_reject', 'booking', id, requestId, { reason });
+      return { ...row, refund: refund ? { id: refund.id, amount: refund.amount, percent: refund.percent, status: refund.status } : null };
+    });
+  }
+  /** Worker tick: bookings whose owner-confirmation window elapsed self-cancel with a full refund. */
+  async expireOwnerConfirmations() {
+    const ids = (await this.db.query(
+      "SELECT id FROM booking.bookings WHERE status='PENDING_OWNER_CONFIRMATION' AND confirm_deadline_at<=now() LIMIT 100")).rows;
+    for (const { id } of ids) {
+      await this.db.transaction(async tx => {
+        const row = await this.lockAny(tx, id);
+        if (row.status !== 'PENDING_OWNER_CONFIRMATION' || row.confirm_deadline_at.getTime() > Date.now()) return;
+        await this.transition(tx, row, 'CANCELLED', 'owner confirmation window elapsed');
+        await tx.query('UPDATE booking.reservations SET active=false WHERE booking_id=$1', [id]);
+        await this.refunds.request(tx, 'booking', id, 100, 'owner confirmation window elapsed');
+      });
+    }
+    return ids.length;
   }
   async list(userId: string, q: BookingQuery) {
     const page = q.page || 1, pageSize = q.pageSize || 20;
@@ -154,9 +208,10 @@ export class BookingService {
       await this.get(userId, id, tx);
       const row = await this.lock(tx, id);
       if (row.status === 'CANCELLED') return row;
-      invariant(row.status === 'PENDING_PAYMENT' || row.status === 'CONFIRMED', 'INVALID_BOOKING_TRANSITION', 'Booking cannot be cancelled');
+      invariant(row.status === 'PENDING_PAYMENT' || row.status === 'PENDING_OWNER_CONFIRMATION' || row.status === 'CONFIRMED',
+        'INVALID_BOOKING_TRANSITION', 'Booking cannot be cancelled');
       // Paid booking: the refund share depends on how far ahead of the slot the user cancels.
-      const paid = row.status === 'CONFIRMED';
+      const paid = row.status === 'CONFIRMED' || row.status === 'PENDING_OWNER_CONFIRMATION';
       const percent = paid ? bookingRefundPercent(row.starts_at, Date.now(), this.refunds.policy) : 0;
       invariant(!paid || percent > 0, 'CANCELLATION_WINDOW_CLOSED', 'This booking is too close to its start time to cancel');
       await this.transition(tx, row, 'CANCELLED', paid ? 'user cancellation with refund' : 'user cancellation', userId, requestId);

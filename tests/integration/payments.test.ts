@@ -135,7 +135,8 @@ test('late cancellation refunds partially, then closes', async () => {
   const closed = await request(`/bookings/${second.booking.id}/cancel`, 'POST', undefined, alice.accessToken, key());
   assert.equal(closed.status, 409);
   assert.equal(closed.body.error.code, 'CANCELLATION_WINDOW_CLOSED');
-  assert.equal((await request(`/bookings/${second.booking.id}`, 'GET', undefined, alice.accessToken)).body.data.status, 'CONFIRMED');
+  // Paid but never confirmed by the owner in this test, so it stays in the awaiting-confirmation state.
+  assert.equal((await request(`/bookings/${second.booking.id}`, 'GET', undefined, alice.accessToken)).body.data.status, 'PENDING_OWNER_CONFIRMATION');
 });
 
 test('paid order can be cancelled for a full refund', async () => {
@@ -209,7 +210,7 @@ test('PayOS checkout is signed, and only a correctly signed webhook confirms the
     const accepted = await request('/webhooks/payments/payos', 'POST', body);
     assert.deepEqual([accepted.status, accepted.body.data.outcome], [200, 'SUCCEEDED']);
     assert.equal((await request('/webhooks/payments/payos', 'POST', body)).body.data.duplicate, true);
-    assert.equal((await request(`/bookings/${booking.id}`, 'GET', undefined, bob.accessToken)).body.data.status, 'CONFIRMED');
+    assert.equal((await request(`/bookings/${booking.id}`, 'GET', undefined, bob.accessToken)).body.data.status, 'PENDING_OWNER_CONFIRMATION');
     // PayOS probes the webhook URL with an order it never created; that must be acknowledged, not rejected.
     const probe = { ...payload, orderCode: 123, reference: 'probe' };
     assert.equal((await request('/webhooks/payments/payos', 'POST', { code: '00', desc: 'success', success: true, data: probe, signature: payosSign(probe, payosKey) })).status, 200);
@@ -249,7 +250,7 @@ test('VNPay returns a signed pay URL and its IPN follows the RspCode contract', 
     assert.equal((await request(`/bookings/${booking.id}`, 'GET', undefined, bob.accessToken)).body.data.status, 'PENDING_PAYMENT');
     assert.deepEqual(await ipn(params), { RspCode: '00', Message: 'Confirm Success' });
     assert.equal((await ipn(params)).RspCode, '02');
-    assert.equal((await request(`/bookings/${booking.id}`, 'GET', undefined, bob.accessToken)).body.data.status, 'CONFIRMED');
+    assert.equal((await request(`/bookings/${booking.id}`, 'GET', undefined, bob.accessToken)).body.data.status, 'PENDING_OWNER_CONFIRMATION');
     const stored = (await pool.query('SELECT provider_ref,provider_paid_at FROM payment.transactions WHERE intent_id=$1', [intent.body.data.id])).rows[0];
     assert.deepEqual([stored.provider_ref, stored.provider_paid_at], ['14012345', '20261007100000']);
   } finally { useProvider('sandbox'); }
@@ -315,7 +316,7 @@ test('account purge erases personal data after the grace period and keeps anonym
     assert.equal((await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE user_id=$1`, [leaver.user.id])).rows[0].n, 0, table);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM chat.messages WHERE sender_id=$1 AND body<>''", [leaver.user.id])).rows[0].n, 0);
   // Accounting records survive, attached to the anonymised user.
-  assert.equal((await pool.query('SELECT status FROM booking.bookings WHERE id=$1', [booking.id])).rows[0].status, 'CONFIRMED');
+  assert.equal((await pool.query('SELECT status FROM booking.bookings WHERE id=$1', [booking.id])).rows[0].status, 'PENDING_OWNER_CONFIRMATION');
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM payment.intents WHERE user_id=$1 AND status='SUCCEEDED'", [leaver.user.id])).rows[0].n, 1);
   const completed = (await pool.query('SELECT completed_at,purge_summary FROM identity.deletion_requests WHERE user_id=$1', [leaver.user.id])).rows[0];
   assert.ok(completed.completed_at && completed.purge_summary.favorites === 1);

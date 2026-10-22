@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Anta — Kênh chủ sân</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="login" class="login-wrap" hidden>
+    <div class="login-card">
+      <h1>Đăng nhập</h1>
+      <p class="sub" style="color:var(--muted)">Dùng tài khoản Anta đã được cấp quyền Chủ sân.</p>
+      <form id="login-form">
+        <label>Email hoặc số điện thoại <input name="identifier" autocomplete="username" required></label>
+        <label>Mật khẩu <input name="password" type="password" autocomplete="current-password" required></label>
+        <p id="login-error" class="error" role="alert"></p>
+        <button type="submit">Đăng nhập</button>
+      </form>
+      <p class="sub" style="color:var(--muted);margin-top:14px">Chưa có quyền chủ sân? Liên hệ quản trị viên Anta để được cấp quyền cho cơ sở của bạn.</p>
+    </div>
+  </div>
+  <div id="app" hidden>
+    <aside>
+      <div class="brand">🏸 Anta</div>
+      <div class="branch-pick">
+        <label>Cơ sở đang quản lý
+          <select id="branch-select"></select>
+        </label>
+      </div>
+      <div>
+        <div class="nav-group">Vận hành</div>
+        <nav class="side" id="nav-ops"></nav>
+        <div class="nav-group" style="margin-top:14px">Cơ sở</div>
+        <nav class="side" id="nav-facility"></nav>
+      </div>
+      <div class="who-box">
+        <div style="flex:1">
+          <span class="who-name" id="who-name"></span>
+          <span class="who-role">Chủ sân</span>
+        </div>
+        <button id="logout" class="ghost small">Đăng xuất</button>
+      </div>
+    </aside>
+    <main>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <div id="view"></div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

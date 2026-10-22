@@ -1,7 +1,10 @@
 import { invariant } from '../../packages/contracts/errors';
-export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
+export type BookingStatus = 'PENDING_PAYMENT' | 'PENDING_OWNER_CONFIRMATION' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
 const transitions: Record<BookingStatus, BookingStatus[]> = {
-  PENDING_PAYMENT: ['CONFIRMED', 'CANCELLED', 'EXPIRED'], CONFIRMED: ['CANCELLED'], CANCELLED: [], EXPIRED: []
+  // Payment success no longer confirms a booking outright: the venue owner must confirm or reject first.
+  PENDING_PAYMENT: ['PENDING_OWNER_CONFIRMATION', 'CANCELLED', 'EXPIRED'],
+  PENDING_OWNER_CONFIRMATION: ['CONFIRMED', 'CANCELLED'],
+  CONFIRMED: ['CANCELLED'], CANCELLED: [], EXPIRED: []
 };
 export function assertTransition(from: BookingStatus, to: BookingStatus) {
   invariant(transitions[from]?.includes(to), 'INVALID_BOOKING_TRANSITION', `Cannot change booking from ${from} to ${to}`);
