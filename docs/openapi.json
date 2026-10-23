@@ -238,7 +238,25 @@
     "/api/v1/public/auth/otp/send": {
       "post": {
         "operationId": "IdentityController_send",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "x-dev-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Dev-Key",
+            "in": "header",
+            "description": "Development backends only",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -12674,6 +12692,10 @@
               "register",
               "reset-password"
             ]
+          },
+          "fcmToken": {
+            "type": "string",
+            "description": "Development backends only: with the X-Dev-Key header, the code is also pushed to this FCM registration token"
           }
         },
         "required": [

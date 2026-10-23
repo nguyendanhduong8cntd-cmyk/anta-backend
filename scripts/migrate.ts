@@ -21,5 +21,8 @@ export async function migrate(pool: Pool) {
 }
 if (require.main === module) {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  migrate(pool).then(() => pool.end()).catch(async () => { console.error('Migration failed; check database configuration and migration checksums.'); await pool.end(); process.exitCode = 1; });
+  migrate(pool).then(() => pool.end()).catch(async error => {
+    console.error(`Migration failed: ${error instanceof Error ? error.message : 'unknown error'}. Check database configuration and migration checksums.`);
+    await pool.end(); process.exitCode = 1;
+  });
 }

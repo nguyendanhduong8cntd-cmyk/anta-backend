@@ -22,7 +22,7 @@ test('configuration fails closed for real providers without credentials', () => 
   assert.equal(loadConfig(vnpayEnv).vnpay?.tmnCode, 'TMN00001');
   assert.throws(() => loadConfig({ ...env, OTP_DELIVERY: 'provider' }));
   assert.throws(() => loadConfig({ ...env, OTP_DELIVERY: 'provider', SMTP_HOST: 'smtp.example.com' }));
-  assert.throws(() => loadConfig({ ...env, OTP_DELIVERY: 'provider', TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 't', TWILIO_FROM: '+1555', DEV_OTP_ENABLED: 'true', DEV_ADMIN_KEY: secret }));
+  assert.throws(() => loadConfig({ ...payosEnv, NODE_ENV: 'production', OTP_DELIVERY: 'provider', TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 't', TWILIO_FROM: '+1555', DEV_OTP_ENABLED: 'true', DEV_ADMIN_KEY: secret }));
   const live = loadConfig({ ...payosEnv, NODE_ENV: 'production', OTP_DELIVERY: 'provider', SMTP_HOST: 'smtp.example.com', SMTP_USER: 'u', SMTP_PASS: 'p', SMTP_FROM: 'no-reply@example.com' });
   assert.deepEqual([live.production, live.smtp?.port, live.smtp?.secure, live.twilio], [true, 587, false, undefined]);
   assert.throws(() => loadConfig({ ...env, REFUND_PARTIAL_HOURS: '48' }));

@@ -1,5 +1,4 @@
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
+import { messaging } from '../../packages/firebase';
 import { Database } from '../../packages/database';
 import { loadConfig } from '../../packages/config';
 export async function deliverNotification(db: Database, eventId: string) {
@@ -13,11 +12,10 @@ export async function deliverNotification(db: Database, eventId: string) {
   if (preference?.push_enabled === false) return;
   const devices = (await db.query('SELECT fcm_token FROM identity.devices WHERE user_id=$1', [event.user_id])).rows;
   if (!devices.length) return;
-  if (!getApps().length) initializeApp({ credential: applicationDefault() });
   // FCM is at-least-once if a crash occurs after sending. Android deduplicates on eventId.
   for (let offset = 0; offset < devices.length; offset += 500) {
     const batch = devices.slice(offset, offset + 500);
-    const result = await getMessaging().sendEachForMulticast({ tokens: batch.map(d => d.fcm_token),
+    const result = await messaging().sendEachForMulticast({ tokens: batch.map(d => d.fcm_token),
       data: { eventId: String(event.id), type: event.type, payload: JSON.stringify(event.payload) } });
     let retry = false;
     for (let i = 0; i < result.responses.length; i++) {

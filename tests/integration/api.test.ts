@@ -33,8 +33,10 @@ process.env.NODE_ENV = 'test';
 process.env.DEV_OTP_ENABLED = 'true';
 process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';
+// Codes stay on this machine whatever the developer's .env holds: no SMTP, SMS or push from these tests.
+process.env.OTP_DELIVERY = 'development';
 // Google sign-in is off unless a test turns it on, whatever the developer's .env holds.
-for (const key of ['GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL']) delete process.env[key];
+for (const key of ['GOOGLE_CLIENT_ID', 'GOOGLE_JWKS_URL', 'OTP_DEV_PUSH']) delete process.env[key];
 let app: INestApplication, base: string, db: Database;
 const runId = randomUUID().slice(0, 8);
 const demoIds = { ...seedIds, branch: randomUUID(), yard: randomUUID() };

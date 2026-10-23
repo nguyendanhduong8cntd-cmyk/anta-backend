@@ -2,6 +2,8 @@ export type PaymentProviderName = 'sandbox' | 'payos' | 'vnpay';
 export interface Config {
   databaseUrl: string; redisUrl: string; jwtSecret: string; otpSecret: string;
   webhookSecret: string; production: boolean; devOtp: boolean; devKey: string;
+  /** Development only: a caller holding the development key may have its code pushed to its own phone over FCM. */
+  devOtpPush: boolean;
   fcmEnabled: boolean; port: number; realtimePort: number; corsOrigins: string[]; redisKeyPrefix: string; bindHost: string;
   /** Reverse proxies in front of the API whose X-Forwarded-For is believed; 0 means clients connect directly. */
   trustedProxyHops: number;
@@ -48,8 +50,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (production && [jwtSecret, otpSecret, webhookSecret].some(v => v.startsWith('local-'))) {
     throw new Error('Local secrets cannot be used in production');
   }
-  if (production && (env.DEV_OTP_ENABLED === 'true' || otpDelivery === 'development' || paymentProvider === 'sandbox')) {
-    throw new Error('Development OTP and sandbox payment are blocked in production');
+  if (production && (env.DEV_OTP_ENABLED === 'true' || env.OTP_DEV_PUSH === 'true' || otpDelivery === 'development' || paymentProvider === 'sandbox')) {
+    throw new Error('Development OTP, its push and sandbox payment are blocked in production');
   }
   // Real providers fail closed: every credential must be present before the process starts.
   let payos: Config['payos'], vnpay: Config['vnpay'], paymentReturnUrl = '', paymentCancelUrl = '';
@@ -72,8 +74,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   const devOtp = env.DEV_OTP_ENABLED === 'true';
   const devKey = env.DEV_ADMIN_KEY || '';
-  if (devOtp && otpDelivery !== 'development') throw new Error('DEV_OTP_ENABLED requires OTP_DELIVERY=development');
   if (devOtp && devKey.length < 32) throw new Error('DEV_ADMIN_KEY must be >=32 characters when development OTP is enabled');
+  // A push reaches the phone that asked for the code, not whoever owns the number or address: it proves nothing,
+  // so it is a development aid like GET /dev/otp, never a way to deliver codes.
+  const devOtpPush = env.OTP_DEV_PUSH === 'true';
+  if (devOtpPush && !devOtp) throw new Error('OTP_DEV_PUSH requires DEV_OTP_ENABLED=true');
+  if (devOtpPush && !env.GOOGLE_APPLICATION_CREDENTIALS) {
+    throw new Error('OTP_DEV_PUSH needs GOOGLE_APPLICATION_CREDENTIALS: a service-account file allowed to send FCM messages');
+  }
   const port = Number(env.PORT || 3000);
   const realtimePort = Number(env.REALTIME_PORT || 3001);
   for (const value of [port, realtimePort]) if (!Number.isInteger(value) || value < 1 || value > 65535) throw new Error('Invalid port');
@@ -82,7 +90,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (refund.partialHours > refund.fullHours) throw new Error('REFUND_PARTIAL_HOURS cannot exceed REFUND_FULL_HOURS');
   const ownerConfirmWindowHours = integer('OWNER_CONFIRM_WINDOW_HOURS', 2, 1, 168);
   return { databaseUrl: required('DATABASE_URL'), redisUrl: required('REDIS_URL'), jwtSecret, otpSecret, webhookSecret,
-    production, devOtp, devKey, fcmEnabled: env.FCM_ENABLED === 'true', port, realtimePort,
+    production, devOtp, devOtpPush, devKey, fcmEnabled: env.FCM_ENABLED === 'true', port, realtimePort,
     corsOrigins: (env.CORS_ORIGINS || '').split(',').filter(Boolean), redisKeyPrefix: env.REDIS_KEY_PREFIX || 'anta:', bindHost: env.BIND_HOST || '127.0.0.1',
     trustedProxyHops: integer('TRUSTED_PROXY_HOPS', 0, 0, 10),
     paymentProvider, paymentReturnUrl, paymentCancelUrl, payos, vnpay, otpDelivery, smtp, twilio, refund,

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { advertisedRating, describe, hourlyPrice, isImportable, isLocalDatabase, openingHours, PriceRow, PriceTable, slotMinutes, stableId, tableSport, typicalPrice, Venue, venueImages, venueSports, yardsOf } from '../../scripts/import-venues';
+import { advertisedRating, describe, hourlyPrice, importAllowed, isImportable, isLocalDatabase, openingHours, PriceRow, PriceTable, slotMinutes, stableId, tableSport, typicalPrice, Venue, venueImages, venueSports, yardsOf } from '../../scripts/import-venues';
 
 const venue: Venue = { slug: 'sport_demo', name: 'Demo', address: '1 Demo', hours: '05:00 - 23:00', sports: ['Cầu lông', 'Pickleball'] };
 const row = (walkIn: number | null, extra: Partial<PriceRow> = {}): PriceRow => ({ days: 'T2 - CN', time: '5h - 6h', fixed: null, walkIn, ...extra });
@@ -56,6 +56,14 @@ test('only complete records are importable, and only into a local database', () 
   assert.equal(isLocalDatabase('postgresql://anta:secret@postgres:5432/anta'), true);
   assert.equal(isLocalDatabase('postgresql://anta:secret@db.example.com:5432/anta'), false);
   assert.equal(isLocalDatabase(undefined), false);
+});
+test('venues go to a public database only when its owner opts in, and never to production', () => {
+  const remote = 'postgresql://anta:secret@dpg-demo-a:5432/anta';
+  assert.equal(importAllowed({ NODE_ENV: 'development', DATABASE_URL: 'postgresql://anta:secret@postgres:5432/anta' }), true);
+  assert.equal(importAllowed({ NODE_ENV: 'development', DATABASE_URL: remote }), false);
+  assert.equal(importAllowed({ NODE_ENV: 'development', DATABASE_URL: remote, ALLOW_PUBLIC_VENUE_IMPORT: 'true' }), true);
+  assert.equal(importAllowed({ NODE_ENV: 'development', DATABASE_URL: remote, ALLOW_PUBLIC_VENUE_IMPORT: 'yes' }), false);
+  assert.equal(importAllowed({ NODE_ENV: 'production', DATABASE_URL: remote, ALLOW_PUBLIC_VENUE_IMPORT: 'true' }), false);
 });
 
 test('a price list is worth its median hourly walk-in price and ignores missing prices', () => {

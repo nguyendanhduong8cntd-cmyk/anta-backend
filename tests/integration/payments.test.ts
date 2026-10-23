@@ -19,6 +19,7 @@ assert.match(new URL(process.env.DATABASE_URL).pathname, /_test$/);
 process.env.NODE_ENV = 'test';
 process.env.PAYMENT_PROVIDER = 'sandbox';
 process.env.OTP_DELIVERY = 'development';
+delete process.env.OTP_DEV_PUSH;
 process.env.DEV_OTP_ENABLED = 'true';
 process.env.DEV_ADMIN_KEY = 'integration-tests-only-development-key-32';
 process.env.FCM_ENABLED = 'false';

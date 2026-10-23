@@ -11,6 +11,8 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/migrations ./migrations
 COPY --from=build --chown=node:node /app/apps/admin/public ./apps/admin/public
+# Venue list for the first import on a host without a shell (Render); about 200 KB.
+COPY --from=build --chown=node:node /app/data ./data
 USER node
 EXPOSE 3000 3001
 CMD ["node", "dist/apps/api/main.js"]

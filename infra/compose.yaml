@@ -10,6 +10,8 @@ x-backend: &backend
     BIND_HOST: 0.0.0.0
     DATABASE_URL: postgresql://anta:anta_local@postgres:5432/anta
     REDIS_URL: redis://redis:6379
+    # The FCM service-account file stays on the host in ../secrets, which Git and the image build both leave out.
+    GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/anta/firebase-service-account.json
   profiles: ["app"]
   restart: unless-stopped
 services:
@@ -20,6 +22,7 @@ services:
       POSTGRES_PASSWORD: anta_local
       POSTGRES_DB: anta
     ports: ["127.0.0.1:55432:5432"]
+    restart: unless-stopped
     volumes: ["postgres-data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U anta -d anta"]
@@ -30,6 +33,7 @@ services:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     ports: ["127.0.0.1:56379:6379"]
+    restart: unless-stopped
     volumes: ["redis-data:/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -46,6 +50,7 @@ services:
     <<: *backend
     command: ["node", "dist/apps/api/main.js"]
     ports: ["127.0.0.1:3000:3000"]
+    volumes: ["../secrets:/run/secrets/anta:ro"]
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -57,6 +62,7 @@ services:
   worker:
     <<: *backend
     command: ["node", "dist/apps/worker/main.js"]
+    volumes: ["../secrets:/run/secrets/anta:ro"]
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }

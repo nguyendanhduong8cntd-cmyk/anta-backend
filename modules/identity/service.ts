@@ -9,7 +9,8 @@ import { checkPassword, digest, hashPassword, keyedDigest, secureEqual, token } 
 import { signAccess, Principal } from '../../packages/auth/tokens';
 import { DeleteAccountDto, LoginDto, OtpSendDto, RegisterDto, ResetDto } from './dto';
 import { verifiedGoogleIdentity } from './google';
-import { deliverOtp, OtpTransports, transportsFor } from './delivery';
+import { deliverOtp, OtpMessage, OtpTransports, realChannel, transportsFor } from './delivery';
+const DEV_PUSH_TIMEOUT_MS = 5000;
 /** The account as its owner sees it. `passwordLogin` is false for an account that only signs in with Google. */
 const profileOf = (row: any) => ({ id: row.id, identifier: row.identifier, displayName: row.display_name,
   passwordLogin: row.password_login_enabled, createdAt: row.created_at, version: row.version });
@@ -23,10 +24,10 @@ export function normalizeIdentifier(value: string) {
 export class IdentityService {
   private readonly config = loadConfig();
   private readonly dummyHash = hashPassword(token());
-  /** Replaceable in tests; real SMTP/SMS transports otherwise. */
-  otpTransports: OtpTransports = this.config.otpDelivery === 'provider' ? transportsFor(this.config) : {};
+  /** Replaceable in tests; the configured SMTP, SMS and development push transports otherwise. */
+  otpTransports: OtpTransports = transportsFor(this.config);
   constructor(private readonly db: Database, private readonly redis: RedisService) {}
-  async sendOtp(dto: OtpSendDto, ip: string) {
+  async sendOtp(dto: OtpSendDto, ip: string, devKey?: string) {
     const identifier = normalizeIdentifier(dto.identifier);
     await this.redis.rateLimit(`otp:ip:${digest(ip)}`, 10, 3600000);
     await this.redis.rateLimit(`otp:account:${keyedDigest(identifier, this.config.otpSecret)}`, 1, 60000);
@@ -39,17 +40,41 @@ export class IdentityService {
       await tx.query('INSERT INTO identity.otp_challenges(id,identifier,purpose,code_hash,expires_at) VALUES($1,$2,$3,$4,$5)',
         [id, identifier, dto.purpose, keyedDigest(`${id}:${code}`, this.config.otpSecret), expiresAt]);
     });
-    if (this.config.otpDelivery === 'provider') {
-      try { return { challengeId: id, expiresAt, delivery: await deliverOtp(this.otpTransports, { identifier, code, purpose: dto.purpose }) }; }
+    const message: OtpMessage = { identifier, code, purpose: dto.purpose };
+    let delivery: string = 'development-only';
+    // A configured channel reaches the identifier's owner. Without one, only a development backend carries on, with its own aids.
+    if (this.config.otpDelivery === 'provider' && (realChannel(this.otpTransports, identifier) || !this.config.devOtp)) {
+      try { delivery = await deliverOtp(this.otpTransports, message); }
       catch (error) {
         // An undelivered code must not stay valid.
         await this.db.query('UPDATE identity.otp_challenges SET consumed_at=now() WHERE id=$1', [id]);
         throw error;
       }
     }
-    // Development delivery is explicit, gated and never logged or returned by public auth endpoints.
-    if (this.config.devOtp) await this.redis.client.set(`dev:otp:${id}`, code, 'EX', 300);
-    return { challengeId: id, expiresAt, delivery: 'development-only' };
+    // Development delivery is explicit, gated and never logged or returned by public auth endpoints. It stands in only for a
+    // channel this backend lacks: a code that went out by email or SMS is read where it went, as it would be in production.
+    if (this.config.devOtp && delivery === 'development-only') {
+      await this.redis.client.set(`dev:otp:${id}`, code, 'EX', 300);
+      await this.developmentPush(dto.fcmToken, devKey, message);
+    }
+    return { challengeId: id, expiresAt, delivery };
+  }
+  /**
+   * Pushes the code to the phone that asked for it. That proves nothing about who owns the identifier, so it takes what
+   * GET /dev/otp takes: a development backend and its key. Best effort: the code stays available at GET /dev/otp.
+   */
+  private async developmentPush(fcmToken: string | undefined, key: string | undefined, message: OtpMessage) {
+    const push = this.otpTransports.push;
+    if (this.config.production || !this.config.devOtpPush || !push || !fcmToken || !key || !secureEqual(key, this.config.devKey)) return;
+    try {
+      // FCM answers in well under a second; a hung call must not hold up the reply, the code is already stored.
+      await Promise.race([push(fcmToken, message), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PushTimeout')), DEV_PUSH_TIMEOUT_MS).unref())]);
+      console.log(JSON.stringify({ event: 'otp.dev_push' }));
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      console.warn(JSON.stringify({ event: 'otp.dev_push_failed',
+        errorCode: typeof code === 'string' ? code : error instanceof Error ? error.name : typeof error }));
+    }
   }
   async developmentCode(challengeId: string, key: string | undefined) {
     invariant(this.config.devOtp && !this.config.production, 'NOT_FOUND', 'Not found', 404);

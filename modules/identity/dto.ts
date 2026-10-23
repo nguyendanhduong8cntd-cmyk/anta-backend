@@ -5,6 +5,8 @@ export class IdentifierDto {
 }
 export class OtpSendDto extends IdentifierDto {
   @ApiProperty({ enum: ['register', 'reset-password'] }) @IsIn(['register', 'reset-password']) purpose!: 'register' | 'reset-password';
+  @ApiPropertyOptional({ description: 'Development backends only: with the X-Dev-Key header, the code is also pushed to this FCM registration token' })
+  @IsOptional() @IsString() @Matches(/^[\w:-]{20,512}$/) fcmToken?: string;
 }
 export class OtpVerifyDto {
   @ApiProperty() @IsUUID('4') challengeId!: string;
