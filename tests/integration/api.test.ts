@@ -310,7 +310,7 @@ test('only signed webhook confirms; replay dedupe and amount checks preserve sta
   assert.equal((await request(`/public/branches/${demoIds.branch}/availability?${q}`)).body.data[0].available, true);
 });
 test('owner portal: confirm and reject require branch ownership, and reject always refunds in full', async () => {
-  const user = await account('owner-flow'), created = await booking(user.accessToken);
+  const user = await directAccount(db.pool, 'owner-flow'), created = await booking(user.accessToken);
   assert.equal((await pay(created.intent)).body.data.outcome, 'SUCCEEDED');
   const bookingId = created.booking.id;
   // A customer (not an owner/staff of the branch) cannot confirm or reject.
