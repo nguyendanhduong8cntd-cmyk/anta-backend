@@ -25,7 +25,7 @@ async function main() {
   const tick = async () => {
     if (stopping || busy) return;
     busy = true;
-    try { await app.get(BookingService).expireDue(); await app.get(CommerceService).expireDue();
+    try { await app.get(BookingService).expireDue(); await app.get(BookingService).expireOwnerConfirmations(); await app.get(CommerceService).expireDue();
       await app.get(PaymentService).expireDue(); await app.get(RefundService).processPending();
       await app.get(IdentityService).purgeDue(); await dispatchOutbox(db, queue); }
     catch { console.error(JSON.stringify({ event: 'worker.tick_failed' })); }

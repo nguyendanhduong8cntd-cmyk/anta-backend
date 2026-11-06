@@ -142,6 +142,9 @@ test('booking add-ons are priced before payment, participants are scoped, and re
     'X-Webhook-Timestamp': timestamp,
     'X-Webhook-Signature': signWebhook(Buffer.from(JSON.stringify(webhook)), timestamp, process.env.SANDBOX_WEBHOOK_SECRET!)
   })).body.data.outcome, 'SUCCEEDED');
+  // A review requires a booking the owner actually confirmed, not merely a paid-but-pending one.
+  const confirmed = await request(`/owner/bookings/${bookingId}/confirm`, 'POST', undefined, owner.accessToken);
+  assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
   await pool.query("UPDATE booking.bookings SET starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' WHERE id=$1", [bookingId]);
   const review = await request(`/bookings/${bookingId}/reviews`, 'POST', { rating: 5, comment: 'Great' }, owner.accessToken);
   assert.equal(review.status, 201);

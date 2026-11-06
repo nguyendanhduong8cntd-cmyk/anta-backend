@@ -15,6 +15,7 @@ import { AccessModule } from '../../packages/access';
 import { CommerceModule } from '../../modules/commerce/module';
 import { ChatModule } from '../../modules/chat/module';
 import { AdminModule } from '../../modules/admin/module';
+import { OwnerModule } from '../../modules/owner/module';
 import { MediaModule } from '../../modules/media/module';
 import { RefundModule } from '../../modules/payment/refunds';
 @Public() @ApiTags('health') @Controller('health')
@@ -31,7 +32,7 @@ class HealthController {
 }
 @Module({
   imports: [DatabaseModule, RedisModule, AuthModule, IdempotencyModule, AccessModule, RefundModule, IdentityModule, CatalogModule,
-    BookingModule, PaymentModule, NotificationModule, ContentModule, CommerceModule, ChatModule, AdminModule, MediaModule],
+    BookingModule, PaymentModule, NotificationModule, ContentModule, CommerceModule, ChatModule, AdminModule, OwnerModule, MediaModule],
   controllers: [HealthController], providers: [{ provide: APP_GUARD, useClass: AuthGuard }]
 })
 export class ApiModule {}
